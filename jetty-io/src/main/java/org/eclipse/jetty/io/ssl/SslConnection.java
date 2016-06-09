@@ -39,7 +39,7 @@ import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.EofException;
-import org.eclipse.jetty.io.SelectChannelEndPoint;
+import org.eclipse.jetty.io.SocketChannelEndPoint;
 import org.eclipse.jetty.io.WriteFlusher;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
@@ -51,7 +51,7 @@ import org.eclipse.jetty.util.log.Logger;
  * and another consumer of an EndPoint (typically an {@link Connection} like HttpConnection) that
  * wants unencrypted data.
  * <p>
- * The connector uses an {@link EndPoint} (typically {@link SelectChannelEndPoint}) as
+ * The connector uses an {@link EndPoint} (typically {@link SocketChannelEndPoint}) as
  * it's source/sink of encrypted data.   It then provides an endpoint via {@link #getDecryptedEndPoint()} to
  * expose a source/sink of unencrypted data to another connection (eg HttpConnection).
  * <p>
@@ -86,6 +86,7 @@ public class SslConnection extends AbstractConnection
     private final List<SslHandshakeListener> handshakeListeners = new ArrayList<>();
     private final ByteBufferPool _bufferPool;
     private final SSLEngine _sslEngine;
+    private final ClientHelloProcessor _processor;
     private final DecryptedEndPoint _decryptedEndPoint;
     private ByteBuffer _decryptedInput;
     private ByteBuffer _encryptedInput;
@@ -112,11 +113,17 @@ public class SslConnection extends AbstractConnection
 
     public SslConnection(ByteBufferPool byteBufferPool, Executor executor, EndPoint endPoint, SSLEngine sslEngine)
     {
+        this(byteBufferPool, executor, endPoint, sslEngine, ClientHelloProcessor.NOOP);
+    }
+
+    public SslConnection(ByteBufferPool byteBufferPool, Executor executor, EndPoint endPoint, SSLEngine sslEngine, ClientHelloProcessor processor)
+    {
         // This connection does not execute calls to onFillable(), so they will be called by the selector thread.
         // onFillable() does not block and will only wakeup another thread to do the actual reading and handling.
         super(endPoint, executor);
         this._bufferPool = byteBufferPool;
         this._sslEngine = sslEngine;
+        this._processor = processor;
         this._decryptedEndPoint = newDecryptedEndPoint();
     }
 
@@ -262,7 +269,7 @@ public class SslConnection extends AbstractConnection
         private boolean _cannotAcceptMoreAppDataToFlush;
         private boolean _handshaken;
         private boolean _underFlown;
-
+        private boolean helloProcessed;
         private final Callback _writeCallback = new Callback()
         {
             @Override
@@ -525,6 +532,13 @@ public class SslConnection extends AbstractConnection
                 {
                     // Let's try reading some encrypted data... even if we have some already.
                     int net_filled = getEndPoint().fill(_encryptedInput);
+
+                    if (!_sslEngine.getUseClientMode() && !helloProcessed)
+                    {
+                        ByteBuffer slice = _encryptedInput.slice();
+                        if (_processor.process(slice, _sslEngine))
+                            helloProcessed = true;
+                    }
 
                     decryption: while (true)
                     {

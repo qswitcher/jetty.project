@@ -18,8 +18,6 @@
 
 package org.eclipse.jetty.start;
 
-import static org.eclipse.jetty.start.UsageException.ERR_BAD_ARG;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,6 +40,8 @@ import org.eclipse.jetty.start.Props.Prop;
 import org.eclipse.jetty.start.config.ConfigSource;
 import org.eclipse.jetty.start.config.ConfigSources;
 import org.eclipse.jetty.start.config.DirConfigSource;
+
+import static org.eclipse.jetty.start.UsageException.ERR_BAD_ARG;
 
 /**
  * The Arguments required to start Jetty.
@@ -157,8 +157,8 @@ public class StartArgs
 
     /** Tri-state True if modules should be added to StartdFirst, false if StartIni first, else null */
     private Boolean addToStartdFirst;
-    
-    
+
+
     // module inspection commands
     /** --write-module-graph=[filename] */
     private String moduleGraphFilename;
@@ -184,7 +184,7 @@ public class StartArgs
     private boolean exec = false;
     private String exec_properties;
     private boolean approveAllLicenses = false;
-   
+
 
     public StartArgs()
     {
@@ -602,7 +602,7 @@ public class StartArgs
             }
             else
                 prop_path=new File(exec_properties).toPath();
-                
+
             try (OutputStream out = Files.newOutputStream(prop_path))
             {
                 properties.store(out,"start.jar properties");
@@ -790,7 +790,7 @@ public class StartArgs
             throw new IllegalStateException();
         return addToStartdFirst.booleanValue();
     }
-    
+
     public void parse(ConfigSources sources)
     {
         ListIterator<ConfigSource> iter = sources.reverseListIterator();
@@ -916,7 +916,7 @@ public class StartArgs
             exec = true;
             return;
         }
-        
+
         // Assign a fixed name to the property file for exec
         if (arg.startsWith("--exec-properties="))
         {
@@ -1099,7 +1099,7 @@ public class StartArgs
     }
 
 
-    
+
     private void enableModules(String source, List<String> moduleNames)
     {
         for (String moduleName : moduleNames)
@@ -1182,12 +1182,13 @@ public class StartArgs
             properties.setProperty(key,value,source);
             if(key.equals("java.version"))
             {
-                Version ver = new Version(value);
+                JavaVersion ver = JavaVersion.parse(value);
 
-                properties.setProperty("java.version",ver.toShortString(),source);
-                properties.setProperty("java.version.major",Integer.toString(ver.getLegacyMajor()),source);
-                properties.setProperty("java.version.minor",Integer.toString(ver.getMajor()),source);
-                properties.setProperty("java.version.revision",Integer.toString(ver.getRevision()),source);
+                properties.setProperty("java.version",ver.getVersion(),source);
+                properties.setProperty("java.version.platform",Integer.toString(ver.getPlatform()),source);
+                properties.setProperty("java.version.major",Integer.toString(ver.getMajor()),source);
+                properties.setProperty("java.version.minor",Integer.toString(ver.getMinor()),source);
+                properties.setProperty("java.version.revision",Integer.toString(ver.getMicro()),source);
                 properties.setProperty("java.version.update",Integer.toString(ver.getUpdate()),source);
             }
         }
@@ -1198,11 +1199,11 @@ public class StartArgs
         int idx = rawPropValue.indexOf('=');
         String key = rawPropValue.substring(0,idx);
         String value = rawPropValue.substring(idx + 1);
-        
+
         properties.remove(key,value,source);
     }
-    
-    
+
+
     public void setRun(boolean run)
     {
         this.run = run;

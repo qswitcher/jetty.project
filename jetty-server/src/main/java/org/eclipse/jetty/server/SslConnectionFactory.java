@@ -20,6 +20,9 @@
 package org.eclipse.jetty.server;
 
 
+import java.util.Iterator;
+import java.util.ServiceLoader;
+
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSession;
 
@@ -27,6 +30,7 @@ import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
+import org.eclipse.jetty.io.ssl.ClientHelloProcessor;
 import org.eclipse.jetty.io.ssl.SslConnection;
 import org.eclipse.jetty.io.ssl.SslHandshakeListener;
 import org.eclipse.jetty.util.annotation.Name;
@@ -80,7 +84,11 @@ public class SslConnectionFactory extends AbstractConnectionFactory
         SSLEngine engine = _sslContextFactory.newSSLEngine(endPoint.getRemoteAddress());
         engine.setUseClientMode(false);
 
-        SslConnection sslConnection = newSslConnection(connector, endPoint, engine);
+        // TODO: cache this, don't do it for every connection.
+        Iterator<ClientHelloProcessor> loader = ServiceLoader.load(ClientHelloProcessor.class).iterator();
+        ClientHelloProcessor processor = loader.hasNext() ? loader.next() : ClientHelloProcessor.NOOP;
+
+        SslConnection sslConnection = newSslConnection(connector, endPoint, engine, processor);
         sslConnection.setRenegotiationAllowed(_sslContextFactory.isRenegotiationAllowed());
         configure(sslConnection, connector, endPoint);
 
@@ -92,9 +100,9 @@ public class SslConnectionFactory extends AbstractConnectionFactory
         return sslConnection;
     }
 
-    protected SslConnection newSslConnection(Connector connector, EndPoint endPoint, SSLEngine engine)
+    protected SslConnection newSslConnection(Connector connector, EndPoint endPoint, SSLEngine engine, ClientHelloProcessor processor)
     {
-        return new SslConnection(connector.getByteBufferPool(), connector.getExecutor(), endPoint, engine);
+        return new SslConnection(connector.getByteBufferPool(), connector.getExecutor(), endPoint, engine, processor);
     }
 
     @Override

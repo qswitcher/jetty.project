@@ -22,7 +22,6 @@ import java.util.List;
 
 import javax.net.ssl.SSLEngine;
 
-import org.eclipse.jetty.alpn.ALPN;
 import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.server.Connector;
@@ -43,20 +42,6 @@ public class ALPNServerConnectionFactory extends NegotiatingServerConnectionFact
     public ALPNServerConnectionFactory(@Name("protocols") String... protocols)
     {
         super("alpn", protocols);
-        try
-        {
-            ClassLoader alpnClassLoader = ALPN.class.getClassLoader();
-            if (alpnClassLoader != null)
-            {
-                LOG.warn("ALPN must be in the boot classloader, not in: " + alpnClassLoader);
-                throw new IllegalStateException("ALPN must be in the boot classloader");
-            }
-        }
-        catch (Throwable x)
-        {
-            LOG.warn("ALPN not available", x);
-            throw new IllegalStateException("ALPN not available", x);
-        }
     }
 
     @Override

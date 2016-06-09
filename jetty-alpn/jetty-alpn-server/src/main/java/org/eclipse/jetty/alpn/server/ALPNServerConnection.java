@@ -22,16 +22,18 @@ import java.util.Collections;
 import java.util.List;
 
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLSession;
 
 import org.eclipse.jetty.alpn.ALPN;
 import org.eclipse.jetty.io.EndPoint;
+import org.eclipse.jetty.io.ssl.ALPNServerProvider;
 import org.eclipse.jetty.server.ConnectionFactory;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.NegotiatingServerConnection;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
-public class ALPNServerConnection extends NegotiatingServerConnection implements ALPN.ServerProvider
+public class ALPNServerConnection extends NegotiatingServerConnection implements ALPN.ServerProvider, ALPNServerProvider
 {
     private static final Logger LOG = Log.getLogger(ALPNServerConnection.class);
 
@@ -51,9 +53,18 @@ public class ALPNServerConnection extends NegotiatingServerConnection implements
     public String select(List<String> clientProtocols)
     {
         SSLEngine sslEngine = getSSLEngine();
+        SSLSession session = sslEngine.getHandshakeSession();
+        return select(new Info(session.getProtocol(), session.getCipherSuite(), clientProtocols));
+    }
+
+    @Override
+    public String select(Info info)
+    {
+        SSLEngine sslEngine = getSSLEngine();
         List<String> serverProtocols = getProtocols();
-        String tlsProtocol = sslEngine.getHandshakeSession().getProtocol();
-        String tlsCipher = sslEngine.getHandshakeSession().getCipherSuite();
+        String tlsProtocol = info.getTLSProtocol();
+        String tlsCipher = info.getCipherSuite();
+        List<String> clientProtocols = info.getProtocols();
         String negotiated = null;
 
         // RFC 7301 states that the server picks the protocol
@@ -89,8 +100,13 @@ public class ALPNServerConnection extends NegotiatingServerConnection implements
         }
         if (LOG.isDebugEnabled())
             LOG.debug("{} protocol selected {}", this, negotiated);
-        setProtocol(negotiated);
-        ALPN.remove(sslEngine);
+
+        if (getProtocol() == null)
+        {
+            setProtocol(negotiated);
+            ALPN.remove(sslEngine);
+        }
+
         return negotiated;
     }
 

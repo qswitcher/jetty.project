@@ -16,7 +16,7 @@
 //  ========================================================================
 //
 
-package org.eclipse.jetty.io.ssl;
+package org.eclipse.jetty.alpn.java.server;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -24,14 +24,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import org.eclipse.jetty.util.TypeUtil;
-
-public class ClientHelloParser
+public class ClientHelloALPNParser
 {
     private State state = State.MESSAGE_TYPE;
     private List<String> ciphers = new ArrayList<>();
     private List<String> protocols = new ArrayList<>();
     private int cursor;
+    private int tlsVersion;
     private int ciphersLength;
     private int cipher;
     private int extensionsLength;
@@ -80,7 +79,14 @@ public class ClientHelloParser
                 }
                 case CLIENT_HELLO_VERSION:
                 {
-                    consume(buffer, State.CLIENT_HELLO_TIMESTAMP, 4);
+                    int currByte = buffer.get() & 0xFF;
+                    --cursor;
+                    tlsVersion += currByte << (8 * cursor);
+                    if (cursor == 0)
+                    {
+                        state = State.CLIENT_HELLO_TIMESTAMP;
+                        cursor = 4;
+                    }
                     break;
                 }
                 case CLIENT_HELLO_TIMESTAMP:
@@ -132,7 +138,7 @@ public class ClientHelloParser
                     cipher += currByte << (8 * cursor);
                     if (cursor == 0)
                     {
-                        Optional<String> cipherName = CipherName.from(cipher);
+                        Optional<String> cipherName = CipherSuiteName.from(cipher);
                         cipherName.map(ciphers::add);
                         cipher = 0;
                         ciphersLength -= 2;
@@ -231,7 +237,10 @@ public class ClientHelloParser
                         extensionType = 0;
                         extensionLength = 0;
                         if (extensionsLength == 0)
+                        {
+                            onClientHello(TLSProtocolName.from(tlsVersion), new ArrayList<>(ciphers), new ArrayList<>(protocols));
                             return true;
+                        }
                     }
                     break;
                 }
@@ -265,7 +274,10 @@ public class ClientHelloParser
                         protocols.add(new String(protocolBytes, StandardCharsets.US_ASCII));
                         state = State.CLIENT_HELLO_ALPN_PROTOCOL_LENGTH;
                         if (extensionLength == 0)
+                        {
+                            onClientHello(TLSProtocolName.from(tlsVersion), new ArrayList<>(ciphers), new ArrayList<>(protocols));
                             return true;
+                        }
                     }
                 }
             }
@@ -284,6 +296,10 @@ public class ClientHelloParser
             return true;
         }
         return false;
+    }
+
+    protected void onClientHello(String tlsProtocol, List<String> ciphers, List<String> alpnProtocols)
+    {
     }
 
     private enum State
@@ -309,17 +325,5 @@ public class ClientHelloParser
         CLIENT_HELLO_ALPN_LENGTH,
         CLIENT_HELLO_ALPN_PROTOCOL_LENGTH,
         CLIENT_HELLO_ALPN_PROTOCOL
-    }
-
-    public static void main(String[] args)
-    {
-        byte[] bytes = TypeUtil.fromHexString("16030100b8010000b40303b18da832af81c989018f2f82b8ed7d6d2e386871a64c2dc9efef77e124a5a09f000016c02bc02fc00ac009c013c01400330039002f0035000a0100007500000010000e00000b776562746964652e636f6d00170000ff01000100000a00080006001700180019000b00020100002300003374000000100017001502683208737064792f332e3108687474702f312e31000500050100000000000d001600140401050106010201040305030603020304020202");
-        ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        ClientHelloParser parser = new ClientHelloParser();
-        if (parser.parse(buffer))
-        {
-            System.err.println("CIPHERS: " + parser.ciphers);
-            System.err.println("PROTOCOLS: " + parser.protocols);
-        }
     }
 }

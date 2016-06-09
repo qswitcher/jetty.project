@@ -56,6 +56,7 @@ import org.eclipse.jetty.io.ChannelEndPoint;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.io.ManagedSelector;
+import org.eclipse.jetty.io.ssl.ClientHelloProcessor;
 import org.eclipse.jetty.io.ssl.SslConnection;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.HttpConnection;
@@ -140,9 +141,9 @@ public class SslBytesServerTest extends SslBytesTest
         SslConnectionFactory sslFactory = new SslConnectionFactory(sslContextFactory, httpFactory.getProtocol())
         {
             @Override
-            protected SslConnection newSslConnection(Connector connector, EndPoint endPoint, SSLEngine engine)
+            protected SslConnection newSslConnection(Connector connector, EndPoint endPoint, SSLEngine engine, ClientHelloProcessor processor)
             {
-                return new SslConnection(connector.getByteBufferPool(), connector.getExecutor(), endPoint, engine)
+                return new SslConnection(connector.getByteBufferPool(), connector.getExecutor(), endPoint, engine, processor)
                 {
                     @Override
                     protected DecryptedEndPoint newDecryptedEndPoint()
@@ -468,7 +469,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
@@ -740,7 +741,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
@@ -798,7 +799,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
@@ -869,7 +870,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
@@ -927,7 +928,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
@@ -980,7 +981,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
@@ -1000,7 +1001,7 @@ public class SslBytesServerTest extends SslBytesTest
     {
         // Don't run on Windows (buggy JVM)
         Assume.assumeTrue(!OS.IS_WINDOWS);
-        
+
         final SSLSocket client = newClient();
 
         SimpleProxy.AutomaticFlow automaticProxyFlow = proxy.startAutomaticFlow();
@@ -1057,7 +1058,7 @@ public class SslBytesServerTest extends SslBytesTest
     {
         // Don't run on Windows (buggy JVM)
         Assume.assumeTrue(!OS.IS_WINDOWS);
-        
+
         final SSLSocket client = newClient();
 
         SimpleProxy.AutomaticFlow automaticProxyFlow = proxy.startAutomaticFlow();
@@ -1175,7 +1176,7 @@ public class SslBytesServerTest extends SslBytesTest
         if (record!=null)
         {
             Assert.assertEquals(record.getType(),Type.ALERT);
-            
+
             // Now should be a raw close
             record = proxy.readFromServer();
             Assert.assertNull(String.valueOf(record), record);
