@@ -98,16 +98,19 @@ public class ALPNServerConnection extends NegotiatingServerConnection implements
                 throw new IllegalStateException();
             }
         }
-        if (LOG.isDebugEnabled())
-            LOG.debug("{} protocol selected {}", this, negotiated);
 
-        if (getProtocol() == null)
-        {
-            setProtocol(negotiated);
-            ALPN.remove(sslEngine);
-        }
+        selected(negotiated);
+        ALPN.remove(sslEngine);
 
         return negotiated;
+    }
+
+    @Override
+    public void selected(String protocol)
+    {
+        if (LOG.isDebugEnabled())
+            LOG.debug("{} protocol selected {}", this, protocol);
+        setProtocol(protocol);
     }
 
     @Override

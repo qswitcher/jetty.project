@@ -25,7 +25,21 @@ import javax.net.ssl.SSLException;
 
 public interface ClientHelloProcessor
 {
-    public static final ClientHelloProcessor NOOP = (buffer, sslEngine) -> true;
+    public static final ClientHelloProcessor NOOP = new ClientHelloProcessor()
+    {
+        @Override
+        public boolean preProcess(ByteBuffer buffer, SSLEngine sslEngine) throws SSLException
+        {
+            return true;
+        }
 
-    public boolean process(ByteBuffer buffer, SSLEngine sslEngine) throws SSLException;
+        @Override
+        public void postProcess(SSLEngine sslEngine) throws SSLException
+        {
+        }
+    };
+
+    public boolean preProcess(ByteBuffer buffer, SSLEngine sslEngine) throws SSLException;
+
+    public void postProcess(SSLEngine sslEngine) throws SSLException;
 }

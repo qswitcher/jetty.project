@@ -24,6 +24,8 @@ public interface ALPNServerProvider
 {
     public String select(Info info);
 
+    public void selected(String protocol);
+
     public static class Info
     {
         private final String tlsProtocol;

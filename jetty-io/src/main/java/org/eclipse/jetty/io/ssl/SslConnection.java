@@ -269,7 +269,8 @@ public class SslConnection extends AbstractConnection
         private boolean _cannotAcceptMoreAppDataToFlush;
         private boolean _handshaken;
         private boolean _underFlown;
-        private boolean helloProcessed;
+        private boolean _helloPreProcessed;
+        private boolean _helloPostProcessed;
         private final Callback _writeCallback = new Callback()
         {
             @Override
@@ -533,11 +534,11 @@ public class SslConnection extends AbstractConnection
                     // Let's try reading some encrypted data... even if we have some already.
                     int net_filled = getEndPoint().fill(_encryptedInput);
 
-                    if (!_sslEngine.getUseClientMode() && !helloProcessed)
+                    if (!_sslEngine.getUseClientMode() && !_helloPreProcessed)
                     {
                         ByteBuffer slice = _encryptedInput.slice();
-                        if (_processor.process(slice, _sslEngine))
-                            helloProcessed = true;
+                        if (_processor.preProcess(slice, _sslEngine))
+                            _helloPreProcessed = true;
                     }
 
                     decryption: while (true)
@@ -662,6 +663,12 @@ public class SslConnection extends AbstractConnection
                                         // return to let it do the wrapping.
                                         if (buffer == __FLUSH_CALLED_FILL)
                                             return 0;
+
+                                        if (!_sslEngine.getUseClientMode() && !_helloPostProcessed)
+                                        {
+                                            _processor.postProcess(_sslEngine);
+                                            _helloPostProcessed = true;
+                                        }
 
                                         _fillRequiresFlushToProgress = true;
                                         flush(__FILL_CALLED_FLUSH);
