@@ -18,6 +18,10 @@
 
 package org.eclipse.jetty.memcached.session;
 
+import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.eclipse.jetty.server.session.SessionDataMap;
 import org.eclipse.jetty.server.session.SessionDataMapFactory;
 
@@ -28,57 +32,65 @@ import org.eclipse.jetty.server.session.SessionDataMapFactory;
  */
 public class MemcachedSessionDataMapFactory implements SessionDataMapFactory
 {
-    protected String _host = "localhost";
-    protected String _port = "11211";
     protected int _expiry;
+    protected boolean _heartbeats = true;
+    protected int[] _weights;    
+    protected List<InetSocketAddress> _addresses;
     
-    
-    
-    
-    public String getHost()
+    /**
+     * @param addresses host and port address of memcached servers
+     */
+    public void setAddresses(InetSocketAddress... addresses)
     {
-        return _host;
+        if (addresses == null)
+            _addresses = null;
+        _addresses = new ArrayList<>();
+        for (InetSocketAddress a:addresses)
+            _addresses.add(a);
+    }
+    
+    /**
+     * @param weights the relative weight to give each server in the list of addresses
+     */
+    public void setWeights(int[] weights)
+    {
+        _weights = weights;
     }
 
 
-    public void setHost(String host)
-    {
-        _host = host;
-    }
-
-
-    public String getPort()
-    {
-        return _port;
-    }
-
-
-    public void setPort(String port)
-    {
-        _port = port;
-    }
-
-
-
-    public int getExpiry()
+    public int getExpirySec()
     {
         return _expiry;
     }
 
 
-    public void setExpiry(int expiry)
+    /**
+     * @param expiry time in secs that memcached item remains valid
+     */
+    public void setExpirySec(int expiry)
     {
         _expiry = expiry;
     }
     
+    public boolean isHeartbeats()
+    {
+        return _heartbeats;
+    }
+
+    public void setHeartbeats(boolean heartbeats)
+    {
+        _heartbeats = heartbeats;
+    }
+
     /** 
      * @see org.eclipse.jetty.server.session.SessionDataMapFactory#getSessionDataMap()
      */
     @Override
     public SessionDataMap getSessionDataMap()
     {
-        MemcachedSessionDataMap m = new MemcachedSessionDataMap(_host, _port);
+        MemcachedSessionDataMap m = new MemcachedSessionDataMap(_addresses, _weights);
         m.setExpirySec(_expiry);
+        m.setHeartbeats(isHeartbeats());
         return m;
     }
 

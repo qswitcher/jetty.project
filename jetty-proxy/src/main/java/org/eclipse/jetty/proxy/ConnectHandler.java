@@ -54,6 +54,7 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
+import org.eclipse.jetty.util.HostPort;
 import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.TypeUtil;
 import org.eclipse.jetty.util.log.Log;
@@ -224,14 +225,9 @@ public class ConnectHandler extends HandlerWrapper
                 return;
             }
 
-            String host = serverAddress;
-            int port = 80;
-            int colon = serverAddress.indexOf(':');
-            if (colon > 0)
-            {
-                host = serverAddress.substring(0, colon);
-                port = Integer.parseInt(serverAddress.substring(colon + 1));
-            }
+            HostPort hostPort = new HostPort(serverAddress);
+            String host = hostPort.getHost();
+            int port = hostPort.getPort(80);
 
             if (!validateDestination(host, port))
             {
@@ -364,6 +360,7 @@ public class ConnectHandler extends HandlerWrapper
         try
         {
             response.setStatus(statusCode);
+            response.setContentLength(0);
             if (statusCode != HttpServletResponse.SC_OK)
                 response.setHeader(HttpHeader.CONNECTION.asString(), HttpHeaderValue.CLOSE.asString());
             response.getOutputStream().close();

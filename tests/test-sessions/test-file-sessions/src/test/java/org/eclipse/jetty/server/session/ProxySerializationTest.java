@@ -47,10 +47,10 @@ public class ProxySerializationTest extends AbstractProxySerializationTest
        FileTestServer.teardown();
     }
     /** 
-     * @see org.eclipse.jetty.server.session.AbstractProxySerializationTest#createServer(int, int, int)
+     * @see org.eclipse.jetty.server.session.AbstractProxySerializationTest#createServer(int, int, int, int)
      */
     @Override
-    public AbstractTestServer createServer(int port, int max, int scavenge,int evictionPolicy )
+    public AbstractTestServer createServer(int port, int max, int scavenge,int evictionPolicy ) throws Exception
     {
         return new FileTestServer(port,max,scavenge, evictionPolicy);
     }

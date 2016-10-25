@@ -20,7 +20,9 @@ package org.eclipse.jetty.http2.client.http;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.Locale;
+import java.util.Queue;
 
 import org.eclipse.jetty.client.HttpChannel;
 import org.eclipse.jetty.client.HttpExchange;
@@ -28,6 +30,7 @@ import org.eclipse.jetty.client.HttpReceiver;
 import org.eclipse.jetty.client.HttpResponse;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.MetaData;
 import org.eclipse.jetty.http2.ErrorCode;
 import org.eclipse.jetty.http2.api.Stream;
@@ -38,10 +41,12 @@ import org.eclipse.jetty.http2.frames.ResetFrame;
 import org.eclipse.jetty.io.ByteBufferPool;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
-import org.eclipse.jetty.util.CompletableCallback;
+import org.eclipse.jetty.util.IteratingCallback;
 
 public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listener
 {
+    private final ContentNotifier contentNotifier = new ContentNotifier();
+
     public HttpReceiverOverHTTP2(HttpChannel channel)
     {
         super(channel);
@@ -62,7 +67,7 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
 
         HttpResponse response = exchange.getResponse();
         MetaData.Response metaData = (MetaData.Response)frame.getMetaData();
-        response.version(metaData.getVersion()).status(metaData.getStatus()).reason(metaData.getReason());
+        response.version(metaData.getHttpVersion()).status(metaData.getStatus()).reason(metaData.getReason());
 
         if (responseBegin(exchange))
         {
@@ -75,7 +80,9 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
 
             if (responseHeaders(exchange))
             {
-                if (frame.isEndStream())
+                int status = metaData.getStatus();
+                boolean informational = HttpStatus.isInformational(status) && status != HttpStatus.SWITCHING_PROTOCOLS_101;
+                if (frame.isEndStream() || informational)
                     responseSuccess(exchange);
             }
         }
@@ -111,40 +118,8 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
         copy.put(original);
         BufferUtil.flipToFlush(copy, 0);
 
-        CompletableCallback delegate = new CompletableCallback()
-        {
-            @Override
-            public void succeeded()
-            {
-                byteBufferPool.release(copy);
-                callback.succeeded();
-                super.succeeded();
-            }
-
-            @Override
-            public void failed(Throwable x)
-            {
-                byteBufferPool.release(copy);
-                callback.failed(x);
-                super.failed(x);
-            }
-
-            @Override
-            public void resume()
-            {
-                if (frame.isEndStream())
-                    responseSuccess(exchange);
-            }
-
-            @Override
-            public void abort(Throwable failure)
-            {
-            }
-        };
-
-        responseContent(exchange, copy, delegate);
-        if (!delegate.tryComplete())
-            delegate.resume();
+        contentNotifier.offer(new DataInfo(exchange, copy, callback, frame.isEndStream()));
+        contentNotifier.iterate();
     }
 
     @Override
@@ -160,8 +135,85 @@ public class HttpReceiverOverHTTP2 extends HttpReceiver implements Stream.Listen
     }
 
     @Override
-    public void onTimeout(Stream stream, Throwable failure)
+    public boolean onIdleTimeout(Stream stream, Throwable x)
     {
-        responseFailure(failure);
+        responseFailure(x);
+        return true;
+    }
+
+    private class ContentNotifier extends IteratingCallback
+    {
+        private final Queue<DataInfo> queue = new ArrayDeque<>();
+        private DataInfo dataInfo;
+
+        private boolean offer(DataInfo dataInfo)
+        {
+            synchronized (this)
+            {
+                return queue.offer(dataInfo);
+            }
+        }
+
+        @Override
+        protected Action process() throws Exception
+        {
+            DataInfo dataInfo;
+            synchronized (this)
+            {
+                dataInfo = queue.poll();
+            }
+
+            if (dataInfo == null)
+            {
+                DataInfo prevDataInfo = this.dataInfo;
+                if (prevDataInfo != null && prevDataInfo.last)
+                    return Action.SUCCEEDED;
+                return Action.IDLE;
+            }
+
+            this.dataInfo = dataInfo;
+            responseContent(dataInfo.exchange, dataInfo.buffer, this);
+            return Action.SCHEDULED;
+        }
+
+        @Override
+        public void succeeded()
+        {
+            ByteBufferPool byteBufferPool = getHttpDestination().getHttpClient().getByteBufferPool();
+            byteBufferPool.release(dataInfo.buffer);
+            dataInfo.callback.succeeded();
+            super.succeeded();
+        }
+
+        @Override
+        protected void onCompleteSuccess()
+        {
+            responseSuccess(dataInfo.exchange);
+        }
+
+        @Override
+        protected void onCompleteFailure(Throwable failure)
+        {
+            ByteBufferPool byteBufferPool = getHttpDestination().getHttpClient().getByteBufferPool();
+            byteBufferPool.release(dataInfo.buffer);
+            dataInfo.callback.failed(failure);
+            responseFailure(failure);
+        }
+    }
+
+    private static class DataInfo
+    {
+        private final HttpExchange exchange;
+        private final ByteBuffer buffer;
+        private final Callback callback;
+        private final boolean last;
+
+        private DataInfo(HttpExchange exchange, ByteBuffer buffer, Callback callback, boolean last)
+        {
+            this.exchange = exchange;
+            this.buffer = buffer;
+            this.callback = callback;
+            this.last = last;
+        }
     }
 }

@@ -1,6 +1,9 @@
 [description]
 Enables a NCSA style request log.
 
+[tags]
+requestlog
+
 [depend]
 server
 
@@ -34,3 +37,6 @@ logs/
 
 ## Timezone of the log entries
 # jetty.requestlog.timezone=GMT
+
+## Whether to log LogLatency
+# jetty.requestlog.loglatency=false

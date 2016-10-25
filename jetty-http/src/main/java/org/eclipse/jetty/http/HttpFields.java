@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import org.eclipse.jetty.util.ArrayTernaryTrie;
 import org.eclipse.jetty.util.QuotedStringTokenizer;
@@ -96,6 +98,11 @@ public class HttpFields implements Iterable<HttpField>
     {
         return new Itr();
     }
+    
+    public Stream<HttpField> stream()
+    {
+        return StreamSupport.stream(Arrays.spliterator(_fields,0,_size),false);
+    }
 
     /**
      * Get Collection of header names.
@@ -161,7 +168,7 @@ public class HttpFields implements Iterable<HttpField>
         for (int i=_size;i-->0;)
         {
             HttpField f=_fields[i];
-            if (f.isSameName(field) && f.contains(field.getValue()))
+            if (f.isSameName(field) && (f.equals(field)||f.contains(field.getValue())))
                 return true;
         }
         return false;
@@ -275,6 +282,100 @@ public class HttpFields implements Iterable<HttpField>
         return list;
     }
 
+
+    /**
+     * Add comma separated values, but only if not already
+     * present.
+     * @param header The header to add the value(s) to
+     * @param values The value(s) to add
+     * @return True if headers were modified
+     */
+    public boolean addCSV(HttpHeader header,String... values)
+    {
+        QuotedCSV existing = null;
+        for (HttpField f : this)
+        {
+            if (f.getHeader()==header)
+            {
+                if (existing==null)
+                    existing = new QuotedCSV(false);
+                existing.addValue(f.getValue());
+            }
+        }
+        
+        String value = addCSV(existing,values);
+        if (value!=null)
+        {
+            add(header,value);
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Add comma separated values, but only if not already
+     * present.
+     * @param name The header to add the value(s) to
+     * @param values The value(s) to add
+     * @return True if headers were modified
+     */
+    public boolean addCSV(String name,String... values)
+    {
+        QuotedCSV existing = null;
+        for (HttpField f : this)
+        {
+            if (f.getName().equalsIgnoreCase(name))
+            {
+                if (existing==null)
+                    existing = new QuotedCSV(false);
+                existing.addValue(f.getValue());
+            }
+        }
+        String value = addCSV(existing,values);
+        if (value!=null)
+        {
+            add(name,value);
+            return true;
+        }
+        return false;
+    }
+
+    protected String addCSV(QuotedCSV existing,String... values)
+    {
+        // remove any existing values from the new values
+        boolean add = true;
+        if (existing!=null && !existing.isEmpty())
+        {
+            add = false;
+        
+            for (int i=values.length;i-->0;)
+            {
+                String unquoted = QuotedCSV.unquote(values[i]);
+                if (existing.getValues().contains(unquoted))
+                    values[i] = null;
+                else
+                    add = true;
+            }
+        }
+            
+        if (add)
+        {
+            StringBuilder value = new StringBuilder();
+            for (String v:values)
+            {
+                if (v==null)
+                    continue;
+                if (value.length()>0)
+                    value.append(", ");
+                value.append(v);
+            }
+            if (value.length()>0)
+                return value.toString();
+        }
+        
+        return null;
+    }
+    
     /**
      * Get multiple field values of the same name, split 
      * as a {@link QuotedCSV}
@@ -285,11 +386,17 @@ public class HttpFields implements Iterable<HttpField>
      */
     public List<String> getCSV(HttpHeader header,boolean keepQuotes)
     {
-        QuotedCSV values = new QuotedCSV(keepQuotes);
+        QuotedCSV values = null;
         for (HttpField f : this)
+        {
             if (f.getHeader()==header)
+            {
+                if (values==null)
+                    values = new QuotedCSV(keepQuotes);
                 values.addValue(f.getValue());
-        return values.getValues();
+            }
+        }
+        return values==null?Collections.emptyList():values.getValues();
     }
 
     /**
@@ -302,11 +409,17 @@ public class HttpFields implements Iterable<HttpField>
      */
     public List<String> getCSV(String name,boolean keepQuotes)
     {
-        QuotedCSV values = new QuotedCSV(keepQuotes);
+        QuotedCSV values = null;
         for (HttpField f : this)
+        {
             if (f.getName().equalsIgnoreCase(name))
+            {
+                if (values==null)
+                    values = new QuotedCSV(keepQuotes);
                 values.addValue(f.getValue());
-        return values.getValues();
+            }
+        }
+        return values==null?Collections.emptyList():values.getValues();
     }
 
     /**
@@ -318,11 +431,18 @@ public class HttpFields implements Iterable<HttpField>
      */
     public List<String> getQualityCSV(HttpHeader header)
     {
-        QuotedQualityCSV values = new QuotedQualityCSV();
+        QuotedQualityCSV values = null;
         for (HttpField f : this)
+        {
             if (f.getHeader()==header)
+            {
+                if (values==null)
+                    values = new QuotedQualityCSV();
                 values.addValue(f.getValue());
-        return values.getValues();
+            }
+        }
+
+        return values==null?Collections.emptyList():values.getValues();
     }
 
     /**
@@ -334,11 +454,17 @@ public class HttpFields implements Iterable<HttpField>
      */
     public List<String> getQualityCSV(String name)
     {
-        QuotedQualityCSV values = new QuotedQualityCSV();
+        QuotedQualityCSV values = null;
         for (HttpField f : this)
+        {
             if (f.getName().equalsIgnoreCase(name))
+            {
+                if (values==null)
+                    values = new QuotedQualityCSV();
                 values.addValue(f.getValue());
-        return values.getValues();
+            }
+        }
+        return values==null?Collections.emptyList():values.getValues();
     }
 
     /**

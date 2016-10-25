@@ -56,10 +56,10 @@ public class RemoteImmortalSessionTest extends AbstractImmortalSessionTest
     
     
     /** 
-     * @see org.eclipse.jetty.server.session.AbstractImmortalSessionTest#createServer(int, int, int)
+     * @see org.eclipse.jetty.server.session.AbstractImmortalSessionTest#createServer(int, int, int, int)
      */
     @Override
-    public AbstractTestServer createServer(int port, int maxInactiveMs, int scavenge, int evictionPolicy)
+    public AbstractTestServer createServer(int port, int maxInactiveMs, int scavenge, int evictionPolicy) throws Exception
     {
         return new InfinispanTestSessionServer(port, maxInactiveMs, scavenge, evictionPolicy, __testSupport.getCache());
     }

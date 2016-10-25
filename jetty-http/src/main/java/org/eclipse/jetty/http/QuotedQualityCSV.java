@@ -35,19 +35,16 @@ import java.util.function.Function;
  * @see "https://tools.ietf.org/html/rfc7230#section-7"
  * @see "https://tools.ietf.org/html/rfc7231#section-5.3.1"
  */
-public class QuotedQualityCSV implements Iterable<String>
+public class QuotedQualityCSV extends QuotedCSV implements Iterable<String>
 {    
     private final static Double ZERO=new Double(0.0);
     private final static Double ONE=new Double(1.0);
-    private enum State { VALUE, PARAM_NAME, PARAM_VALUE, Q_VALUE};
     
-    private final List<String> _values = new ArrayList<>();
     private final List<Double> _quality = new ArrayList<>();
     private boolean _sorted = false;
-    private final Function<String, Integer> secondaryOrderingFunction;
+    private final Function<String, Integer> _secondaryOrdering;
     
     /* ------------------------------------------------------------ */
-
     /**
      * Sorts values with equal quality according to the length of the value String.
      */
@@ -56,183 +53,72 @@ public class QuotedQualityCSV implements Iterable<String>
         this((s) -> s.length());
     }
 
+    /* ------------------------------------------------------------ */
     /**
      * Sorts values with equal quality according to given order.
+     * @param preferredOrder Array indicating the preferred order of known values
      */
-    public QuotedQualityCSV(String[] serverPreferredValueOrder)
+    public QuotedQualityCSV(String[] preferredOrder)
     {
         this((s) -> {
-            for (int i=0;i<serverPreferredValueOrder.length;++i)
-                if (serverPreferredValueOrder[i].equals(s))
-                    return serverPreferredValueOrder.length-i;
+            for (int i=0;i<preferredOrder.length;++i)
+                if (preferredOrder[i].equals(s))
+                    return preferredOrder.length-i;
 
             if ("*".equals(s))
-                return serverPreferredValueOrder.length;
+                return preferredOrder.length;
 
             return MIN_VALUE;
         });
     }
 
+    /* ------------------------------------------------------------ */
     /**
      * Orders values with equal quality with the given function.
+     * @param secondaryOrdering Function to apply an ordering other than specified by quality
      */
-    public QuotedQualityCSV(Function<String, Integer> secondaryOrderingFunction)
+    public QuotedQualityCSV(Function<String, Integer> secondaryOrdering)
     {
-        this.secondaryOrderingFunction = secondaryOrderingFunction;
+        this._secondaryOrdering = secondaryOrdering;
     }
-
 
     /* ------------------------------------------------------------ */
     public void addValue(String value)
     {
-        StringBuffer buffer = new StringBuffer();
-        
-        int l=value.length();
-        State state=State.VALUE;
-        boolean quoted=false;
-        boolean sloshed=false;
-        int nws_length=0;
-        int last_length=0;
-        Double q=ONE;
-        for (int i=0;i<=l;i++)
+        super.addValue(value);
+        while(_quality.size()<_values.size())
+            _quality.add(ONE);
+    }
+    
+    /* ------------------------------------------------------------ */
+    @Override
+    protected void parsedValue(StringBuffer buffer)
+    {
+        super.parsedValue(buffer);
+    }
+
+    /* ------------------------------------------------------------ */
+    @Override
+    protected void parsedParam(StringBuffer buffer, int valueLength, int paramName, int paramValue)
+    {
+        if (buffer.charAt(paramName)=='q' && paramValue>paramName && buffer.charAt(paramName+1)=='=')
         {
-            char c=i==l?0:value.charAt(i);
-            
-            // Handle quoting https://tools.ietf.org/html/rfc7230#section-3.2.6
-            if (quoted && c!=0)
+            Double q;
+            try
             {
-                if (sloshed)
-                    sloshed=false;
-                else
-                {
-                    switch(c)
-                    {
-                        case '\\':
-                            sloshed=true;
-                            break;
-                        case '"':
-                            quoted=false;
-                            if (state==State.Q_VALUE)
-                                continue;
-                            break;
-                    }
-                }
-
-                buffer.append(c);
-                nws_length=buffer.length();
-                continue;
+                q=(_keepQuotes && buffer.charAt(paramValue)=='"')
+                    ?new Double(buffer.substring(paramValue+1,buffer.length()-1))
+                    :new Double(buffer.substring(paramValue));
             }
-            
-            // Handle common cases
-            switch(c)
+            catch(Exception e)
             {
-                case ' ':
-                case '\t':
-                    if (buffer.length()>last_length) // not leading OWS
-                        buffer.append(c);
-                    continue;
-
-                case '"':
-                    quoted=true;
-                    if (state==State.Q_VALUE)
-                        continue;
-        
-                    buffer.append(c);
-                    nws_length=buffer.length();
-                    continue;
-                    
-                case ';':
-                    if (state==State.Q_VALUE)
-                    {
-                        try
-                        {
-                            q=new Double(buffer.substring(last_length));
-                        }
-                        catch(Exception e)
-                        {
-                            q=ZERO;
-                        }
-                        nws_length=last_length;
-                    }
-                    
-                    buffer.setLength(nws_length); // trim following OWS
-                    buffer.append(c);
-                    last_length=++nws_length;
-                    state=State.PARAM_NAME;
-                    continue;
-                    
-                case ',':
-                case 0:
-                    if (state==State.Q_VALUE)
-                    {
-                        try
-                        {
-                            q=new Double(buffer.substring(last_length));
-                        }
-                        catch(Exception e)
-                        {
-                            q=ZERO;
-                        }
-                        nws_length=last_length;
-                    }
-                    buffer.setLength(nws_length); // trim following OWS
-                    if (q>0.0 && nws_length>0)
-                    {
-                        _values.add(buffer.toString());
-                        _quality.add(q);
-                        _sorted=false;
-                    }
-                    buffer.setLength(0);
-                    last_length=0;
-                    nws_length=0;
-                    q=ONE;
-                    state=State.VALUE;
-                    continue;
-
-                default:
-                {
-                    switch (state)
-                    {
-                        case VALUE:
-                        {
-                            buffer.append(c);
-                            nws_length=buffer.length();
-                            continue;
-                        }
-
-                        case PARAM_NAME:
-                        {
-                            if (c=='=')
-                            {
-                                buffer.setLength(nws_length); // trim following OWS
-                                if (nws_length-last_length==1 && Character.toLowerCase(buffer.charAt(last_length))=='q')
-                                {
-                                    buffer.setLength(last_length-1);
-                                    nws_length=buffer.length();
-                                    last_length=nws_length;
-                                    state=State.Q_VALUE;
-                                    continue;
-                                }
-                                buffer.append(c);
-                                last_length=++nws_length;
-                                state=State.PARAM_VALUE;
-                                continue;
-                            }
-                            buffer.append(c);
-                            nws_length=buffer.length();
-                            continue;
-                        }
-
-                        case PARAM_VALUE:
-                        case Q_VALUE:
-                        {
-                            buffer.append(c);
-                            nws_length=buffer.length();
-                            continue;
-                        }
-                    }
-                }
-            }  
+                q=ZERO;
+            }
+            buffer.setLength(paramName-1);
+            
+            while(_quality.size()<_values.size())
+                _quality.add(ONE);
+            _quality.add(q);
         }
     }
 
@@ -264,7 +150,7 @@ public class QuotedQualityCSV implements Iterable<String>
             Double q = _quality.get(i);
 
             int compare=last.compareTo(q);
-            if (compare>0 || (compare==0 && secondaryOrderingFunction.apply(v)<lastOrderIndex))
+            if (compare>0 || (compare==0 && _secondaryOrdering.apply(v)<lastOrderIndex))
             {
                 _values.set(i, _values.get(i + 1));
                 _values.set(i + 1, v);
@@ -277,8 +163,14 @@ public class QuotedQualityCSV implements Iterable<String>
             }
 
             last=q;
-            lastOrderIndex=secondaryOrderingFunction.apply(v);
-
+            lastOrderIndex=_secondaryOrdering.apply(v);
+        }
+        
+        int last_element=_quality.size();
+        while(last_element>0 && _quality.get(--last_element).equals(ZERO))
+        {
+            _quality.remove(last_element);
+            _values.remove(last_element);
         }
     }
 }

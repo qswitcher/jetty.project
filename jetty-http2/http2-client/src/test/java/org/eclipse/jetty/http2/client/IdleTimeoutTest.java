@@ -79,8 +79,7 @@ public class IdleTimeoutTest extends AbstractTest
             @Override
             public void onClose(Session session, GoAwayFrame frame)
             {
-                if (session.isClosed() && ((HTTP2Session)session).isDisconnected())
-                    latch.countDown();
+                latch.countDown();
             }
         });
 
@@ -95,9 +94,7 @@ public class IdleTimeoutTest extends AbstractTest
             }
         }, new Stream.Listener.Adapter());
 
-        Assert.assertTrue(latch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
-
-        sleep(1000);
+        Assert.assertTrue(latch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
     }
 
     @Test
@@ -120,8 +117,7 @@ public class IdleTimeoutTest extends AbstractTest
             @Override
             public void onClose(Session session, GoAwayFrame frame)
             {
-                if (session.isClosed() && ((HTTP2Session)session).isDisconnected())
-                    latch.countDown();
+                latch.countDown();
             }
         });
 
@@ -137,7 +133,7 @@ public class IdleTimeoutTest extends AbstractTest
             }
         }, new Stream.Listener.Adapter());
 
-        Assert.assertTrue(latch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(latch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
     }
 
     @Test
@@ -191,7 +187,7 @@ public class IdleTimeoutTest extends AbstractTest
             }
         });
 
-        Assert.assertTrue(replyLatch.await(3 * idleTimeout, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(replyLatch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
 
         // Just make sure onClose() has never been called, but don't wait too much
         Assert.assertFalse(closeLatch.await(idleTimeout / 2, TimeUnit.MILLISECONDS));
@@ -216,8 +212,7 @@ public class IdleTimeoutTest extends AbstractTest
             @Override
             public void onClose(Session session, GoAwayFrame frame)
             {
-                if (session.isClosed() && ((HTTP2Session)session).isDisconnected())
-                    closeLatch.countDown();
+                closeLatch.countDown();
             }
         });
         client.setIdleTimeout(idleTimeout);
@@ -234,7 +229,7 @@ public class IdleTimeoutTest extends AbstractTest
             }
         }, new Stream.Listener.Adapter());
 
-        Assert.assertTrue(closeLatch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(closeLatch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
         Assert.assertTrue(session.isClosed());
     }
 
@@ -254,8 +249,7 @@ public class IdleTimeoutTest extends AbstractTest
             @Override
             public void onClose(Session session, GoAwayFrame frame)
             {
-                if (session.isClosed() && ((HTTP2Session)session).isDisconnected())
-                    closeLatch.countDown();
+                closeLatch.countDown();
             }
         });
         client.setIdleTimeout(idleTimeout);
@@ -272,7 +266,7 @@ public class IdleTimeoutTest extends AbstractTest
             }
         }, new Stream.Listener.Adapter());
 
-        Assert.assertTrue(closeLatch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(closeLatch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
     }
 
     @Test
@@ -325,7 +319,7 @@ public class IdleTimeoutTest extends AbstractTest
         });
 
         Assert.assertFalse(closeLatch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
-        Assert.assertTrue(replyLatch.await(3 * idleTimeout, TimeUnit.MILLISECONDS));
+        Assert.assertTrue(replyLatch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
     }
 
     @Test
@@ -364,10 +358,11 @@ public class IdleTimeoutTest extends AbstractTest
             }
 
             @Override
-            public void onTimeout(Stream stream, Throwable x)
+            public boolean onIdleTimeout(Stream stream, Throwable x)
             {
                 Assert.assertThat(x, Matchers.instanceOf(TimeoutException.class));
                 timeoutLatch.countDown();
+                return true;
             }
         });
 
@@ -394,9 +389,10 @@ public class IdleTimeoutTest extends AbstractTest
                 return new Stream.Listener.Adapter()
                 {
                     @Override
-                    public void onTimeout(Stream stream, Throwable x)
+                    public boolean onIdleTimeout(Stream stream, Throwable x)
                     {
                         timeoutLatch.countDown();
+                        return true;
                     }
                 };
             }
@@ -438,9 +434,10 @@ public class IdleTimeoutTest extends AbstractTest
                 return new Stream.Listener.Adapter()
                 {
                     @Override
-                    public void onTimeout(Stream stream, Throwable x)
+                    public boolean onIdleTimeout(Stream stream, Throwable x)
                     {
                         timeoutLatch.countDown();
+                        return true;
                     }
                 };
             }
@@ -474,14 +471,17 @@ public class IdleTimeoutTest extends AbstractTest
                     @Override
                     public void succeeded()
                     {
+                        // Idle timeout should not fire while receiving.
+                        Assert.assertEquals(1, timeoutLatch.getCount());
                         dataLatch.countDown();
                     }
                 });
             }
         });
 
-        Assert.assertTrue(dataLatch.await(2 * idleTimeout, TimeUnit.MILLISECONDS));
-        Assert.assertFalse(timeoutLatch.await(0, TimeUnit.SECONDS));
+        Assert.assertTrue(dataLatch.await(5 * idleTimeout, TimeUnit.MILLISECONDS));
+        // The server did not send a response, so it will eventually timeout.
+        Assert.assertTrue(timeoutLatch.await(5 * idleTimeout, TimeUnit.SECONDS));
     }
 
     @Test
@@ -535,12 +535,13 @@ public class IdleTimeoutTest extends AbstractTest
             stream.data(new DataFrame(stream.getId(), ByteBuffer.allocate(1), true), Callback.NOOP);
         });
 
-        Assert.assertFalse(resetLatch.await(0, TimeUnit.SECONDS));
+        Assert.assertFalse(resetLatch.await(1, TimeUnit.SECONDS));
     }
 
     @Test
     public void testBufferedReadsResetStreamIdleTimeout() throws Exception
     {
+        int bufferSize = 8192;
         long delay = 1000;
         start(new HttpServlet()
         {
@@ -548,7 +549,7 @@ public class IdleTimeoutTest extends AbstractTest
             protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException
             {
                 ServletInputStream input = request.getInputStream();
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[bufferSize];
                 while (true)
                 {
                     int read = input.read(buffer);
@@ -579,12 +580,13 @@ public class IdleTimeoutTest extends AbstractTest
 
         // Send data larger than the flow control window.
         // The client will send bytes up to the flow control window immediately
-        // and they will be buffered by the server, which will read them slowly.
-        // Server reads should reset the idle timeout.
-        ByteBuffer data = ByteBuffer.allocate(FlowControlStrategy.DEFAULT_WINDOW_SIZE + 1);
+        // and they will be buffered by the server; the Servlet will consume them slowly.
+        // Servlet reads should reset the idle timeout.
+        int contentLength = FlowControlStrategy.DEFAULT_WINDOW_SIZE + 1;
+        ByteBuffer data = ByteBuffer.allocate(contentLength);
         stream.data(new DataFrame(stream.getId(), data, true), Callback.NOOP);
 
-        Assert.assertTrue(latch.await(555, TimeUnit.SECONDS));
+        Assert.assertTrue(latch.await(2 * (contentLength / bufferSize + 1) * delay, TimeUnit.MILLISECONDS));
     }
 
     private void sleep(long value)

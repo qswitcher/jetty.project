@@ -3,6 +3,7 @@
     <groupId>org.eclipse.jetty.examples</groupId>
     <artifactId>examples-parent</artifactId>
     <version>9.4.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.eclipse.jetty</groupId>
@@ -14,6 +15,13 @@
     <bundle-symbolic-name>${project.groupId}.embedded</bundle-symbolic-name>
   </properties>
   <dependencies>
+  
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>18.0</version>
+        </dependency>
+        
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-util-ajax</artifactId>

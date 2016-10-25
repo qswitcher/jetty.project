@@ -792,13 +792,13 @@ public class SessionHandler extends ScopedHandler
         session.setExtendedId(_sessionIdManager.getExtendedId(id, request));
         session.getSessionData().setLastNode(_sessionIdManager.getWorkerName());
         
-        if (request.isSecure())
-            session.setAttribute(Session.SESSION_CREATED_SECURE, Boolean.TRUE);
         try
         {
-
             _sessionCache.put(id, session);
-            _sessionsCreatedStats.increment();         
+            _sessionsCreatedStats.increment();  
+            
+            if (request.isSecure())
+                session.setAttribute(Session.SESSION_CREATED_SECURE, Boolean.TRUE);
             
             if (_sessionListeners!=null)
             {
@@ -1285,10 +1285,7 @@ public class SessionHandler extends ScopedHandler
      * when either the session has not been accessed for a 
      * configurable amount of time, or the session itself
      * has passed its expiry.
-     * <ul>
-     * <li> for being expired </li>
-     * <li> for being idle </li>
-     * </ul>
+     * 
      * @param session
      */
     public void sessionInactivityTimerExpired (Session session)
@@ -1682,6 +1679,16 @@ public class SessionHandler extends ScopedHandler
         baseRequest.setRequestedSessionIdFromCookie(requested_session_id!=null && requested_session_id_from_cookie);
         if (session != null && isValid(session))
             baseRequest.setSession(session);
+    }
+
+
+    /** 
+     * @see java.lang.Object#toString()
+     */
+    @Override
+    public String toString()
+    {
+        return String.format("%s%d==dftMaxIdleSec=%d", this.getClass().getName(),this.hashCode(),_dftMaxIdleSecs);
     }
 
   

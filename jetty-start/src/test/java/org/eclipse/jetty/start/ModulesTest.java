@@ -167,12 +167,11 @@ public class ModulesTest
         modules.registerAll();
 
         // Enable 2 modules
-        modules.select("base",TEST_SOURCE);
-        modules.select("optional",TEST_SOURCE);
-        modules.sort();
+        modules.enable("base",TEST_SOURCE);
+        modules.enable("optional",TEST_SOURCE);
 
         // Collect active module list
-        List<Module> active = modules.getSelected();
+        List<Module> active = modules.getEnabled();
 
         // Assert names are correct, and in the right order
         List<String> expectedNames = new ArrayList<>();

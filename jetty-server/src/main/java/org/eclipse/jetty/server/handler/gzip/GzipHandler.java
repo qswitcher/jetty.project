@@ -32,7 +32,6 @@ import org.eclipse.jetty.http.CompressedContentFormat;
 import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
-import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.http.pathmap.PathSpecSet;
 import org.eclipse.jetty.server.HttpOutput;
@@ -66,6 +65,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
     private int _compressionLevel=Deflater.DEFAULT_COMPRESSION;
     private boolean _checkGzExists = true;
     private boolean _syncFlush = false;
+    private int _inflateBufferSize = -1;
     
     // non-static, as other GzipHandler instances may have different configurations
     private final ThreadLocal<Deflater> _deflater = new ThreadLocal<>();
@@ -76,6 +76,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
     private final IncludeExclude<String> _mimeTypes = new IncludeExclude<>();
     
     private HttpField _vary;
+
 
 
     /* ------------------------------------------------------------ */
@@ -401,6 +402,24 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
 
     /* ------------------------------------------------------------ */
     /**
+     * @return size in bytes of the buffer to inflate compressed request, or 0 for no inflation.
+     */
+    public int getInflateBufferSize()
+    {
+        return _inflateBufferSize;
+    }
+
+    /* ------------------------------------------------------------ */
+    /**
+     * @param size size in bytes of the buffer to inflate compressed request, or 0 for no inflation.
+     */
+    public void setInflateBufferSize(int size)
+    {
+        _inflateBufferSize = size;
+    }
+    
+    /* ------------------------------------------------------------ */
+    /**
      * @see org.eclipse.jetty.server.handler.HandlerWrapper#handle(java.lang.String, org.eclipse.jetty.server.Request, javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
      */
     @Override
@@ -409,6 +428,19 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         ServletContext context = baseRequest.getServletContext();
         String path = context==null?baseRequest.getRequestURI():URIUtil.addPaths(baseRequest.getServletPath(),baseRequest.getPathInfo());
         LOG.debug("{} handle {} in {}",this,baseRequest,context);
+        
+        // Handle request inflation
+        if (_inflateBufferSize>0)
+        {
+            HttpField ce = baseRequest.getHttpFields().getField(HttpHeader.CONTENT_ENCODING);
+            if (ce!=null && "gzip".equalsIgnoreCase(ce.getValue()))
+            {
+                // TODO should check ce.contains and then remove just the gzip encoding
+                baseRequest.getHttpFields().remove(HttpHeader.CONTENT_ENCODING);
+                baseRequest.getHttpFields().add(new HttpField("X-Content-Encoding",ce.getValue()));
+                baseRequest.getHttpInput().addInterceptor(new GzipHttpInputInterceptor(baseRequest.getHttpChannel().getByteBufferPool(),_inflateBufferSize));
+            }
+        }
         
         HttpOutput out = baseRequest.getResponse().getHttpOutput();   
         // Are we already being gzipped?
@@ -425,7 +457,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         }
         
         // If not a supported method - no Vary because no matter what client, this URI is always excluded
-        if (!_methods.matches(baseRequest.getMethod()))
+        if (!_methods.test(baseRequest.getMethod()))
         {
             LOG.debug("{} excluded by method {}",this,request);
             _handler.handle(target,baseRequest, request, response);
@@ -478,6 +510,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
             int i=etag.indexOf(CompressedContentFormat.GZIP._etagQuote);
             if (i>0)
             {
+                baseRequest.setAttribute("o.e.j.s.h.gzip.GzipHandler.etag",etag);
                 while (i>=0)
                 {
                     etag=etag.substring(0,i)+etag.substring(i+CompressedContentFormat.GZIP._etag.length());
@@ -487,11 +520,21 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
             }
         }
 
-        // install interceptor and handle
-        out.setInterceptor(new GzipHttpOutputInterceptor(this,getVaryField(),baseRequest.getHttpChannel(),out.getInterceptor(),isSyncFlush()));
+        HttpOutput.Interceptor orig_interceptor = out.getInterceptor();
+        try
+        {
+            // install interceptor and handle
+            out.setInterceptor(new GzipHttpOutputInterceptor(this,getVaryField(),baseRequest.getHttpChannel(),orig_interceptor,isSyncFlush()));
 
-        if (_handler!=null)
-            _handler.handle(target,baseRequest, request, response);
+            if (_handler!=null)
+                _handler.handle(target,baseRequest, request, response);
+        }
+        finally
+        {
+            // reset interceptor if request not handled
+            if (!baseRequest.isHandled() && !baseRequest.isAsyncStarted())
+                out.setInterceptor(orig_interceptor);
+        }
     }
 
     /* ------------------------------------------------------------ */
@@ -506,14 +549,14 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         if (ua == null)
             return false;
         
-        return _agentPatterns.matches(ua);
+        return _agentPatterns.test(ua);
     }
 
     /* ------------------------------------------------------------ */
     @Override
     public boolean isMimeTypeGzipable(String mimetype)
     {
-        return _mimeTypes.matches(mimetype);
+        return _mimeTypes.test(mimetype);
     }
 
     /* ------------------------------------------------------------ */
@@ -529,7 +572,7 @@ public class GzipHandler extends HandlerWrapper implements GzipFactory
         if (requestURI == null)
             return true;
         
-        return _paths.matches(requestURI);
+        return _paths.test(requestURI);
     }
 
     /* ------------------------------------------------------------ */

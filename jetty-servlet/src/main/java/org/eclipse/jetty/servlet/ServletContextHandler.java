@@ -60,7 +60,6 @@ import org.eclipse.jetty.server.handler.HandlerCollection;
 import org.eclipse.jetty.server.handler.HandlerWrapper;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
 import org.eclipse.jetty.server.session.SessionHandler;
-import org.eclipse.jetty.servlet.BaseHolder.Source;
 import org.eclipse.jetty.util.DecoratedObjectFactory;
 import org.eclipse.jetty.util.DeprecationWarning;
 import org.eclipse.jetty.util.annotation.ManagedAttribute;
@@ -424,7 +423,7 @@ public class ServletContextHandler extends ContextHandler
      */
     public ServletHolder addServlet(Class<? extends Servlet> servlet,String pathSpec)
     {
-        return getServletHandler().addServletWithMapping(servlet,pathSpec);
+        return getServletHandler().addServletWithMapping(servlet, pathSpec);
     }
 
     /* ------------------------------------------------------------ */

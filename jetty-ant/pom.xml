@@ -26,12 +26,19 @@
             <configuration>
               <includeGroupIds>org.eclipse.jetty</includeGroupIds>
               <excludeGroupIds>org.eclipse.jetty.orbit,org.eclipse.jetty.websocket,org.eclipse.jetty.drafts</excludeGroupIds>
-              <excludeArtifactIds>jetty-all,jetty-start,jetty-monitor</excludeArtifactIds>
+              <excludeArtifactIds>jetty-all,jetty-start</excludeArtifactIds>
               <includeTypes>jar</includeTypes>
               <outputDirectory>${project.build.directory}/test-lib</outputDirectory>
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
       </plugin>
     </plugins>
   </build>

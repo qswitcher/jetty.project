@@ -33,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ public class PathResource extends Resource
         try
         {
             if (Files.isSymbolicLink(path))
-                return Files.readSymbolicLink(path);
+                return path.getParent().resolve(Files.readSymbolicLink(path));
             if (Files.exists(path))
             {
                 Path real = abs.toRealPath(FOLLOW_LINKS);
@@ -229,7 +230,7 @@ public class PathResource extends Resource
         Path path;
         try
         {
-            path = new File(uri).toPath();
+            path = Paths.get(uri);
         }
         catch (InvalidPathException e)
         {
@@ -377,6 +378,13 @@ public class PathResource extends Resource
     @Override
     public InputStream getInputStream() throws IOException
     {
+        /* Mimic behavior from old FileResource class and its
+         * usage of java.io.FileInputStream(File) which will trigger
+         * an IOException on construction if the path is a directory
+         */
+        if (Files.isDirectory(path))
+            throw new IOException(path + " is a directory");
+
         return Files.newInputStream(path,StandardOpenOption.READ);
     }
 

@@ -28,10 +28,8 @@ import org.eclipse.jetty.deploy.bindings.DebugListenerBinding;
 import org.eclipse.jetty.deploy.providers.WebAppProvider;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.jmx.MBeanContainer;
-import org.eclipse.jetty.rewrite.handler.CompactPathRule;
 import org.eclipse.jetty.rewrite.handler.RewriteHandler;
 import org.eclipse.jetty.security.HashLoginService;
-import org.eclipse.jetty.server.ConnectorStatistics;
 import org.eclipse.jetty.server.DebugListener;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
@@ -40,6 +38,7 @@ import org.eclipse.jetty.server.LowResourceMonitor;
 import org.eclipse.jetty.server.NCSARequestLog;
 import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnectionStatistics;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.SslConnectionFactory;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
@@ -166,7 +165,7 @@ public class LikeJettyXml
 
         // === jetty-deploy.xml ===
         DeploymentManager deployer = new DeploymentManager();
-        DebugListener debug = new DebugListener(System.out,true,true,true);
+        DebugListener debug = new DebugListener(System.err,true,true,true);
         server.addBean(debug);        
         deployer.addLifeCycleBinding(new DebugListenerBinding(debug));
         deployer.setContexts(contexts);
@@ -194,7 +193,7 @@ public class LikeJettyXml
         StatisticsHandler stats = new StatisticsHandler();
         stats.setHandler(server.getHandler());
         server.setHandler(stats);
-        ConnectorStatistics.addToAllConnectors(server);
+        ServerConnectionStatistics.addToAllConnectors(server);
 
         // === Rewrite Handler
         RewriteHandler rewrite = new RewriteHandler();

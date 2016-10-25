@@ -32,28 +32,20 @@ import org.junit.Test;
  */
 public class ReentrantRequestSessionTest extends AbstractReentrantRequestSessionTest
 {
-    static GCloudSessionTestSupport _testSupport;
-
-    @BeforeClass
-    public static void setup () throws Exception
-    {
-        _testSupport = new GCloudSessionTestSupport();
-        _testSupport.setUp();
-    }
 
     @AfterClass
     public static void teardown () throws Exception
     {
-        _testSupport.tearDown();
+        GCloudTestSuite.__testSupport.deleteSessions();
     }
 
     /** 
-     * @see org.eclipse.jetty.server.session.AbstractReentrantRequestSessionTest#createServer(int)
+     * @see org.eclipse.jetty.server.session.AbstractReentrantRequestSessionTest#createServer(int, int, int, int)
      */
     @Override
-    public AbstractTestServer createServer(int port,int max, int scavengePeriod,int evictionPolicy)
+    public AbstractTestServer createServer(int port,int max, int scavengePeriod,int evictionPolicy) throws Exception
     {
-        return  new GCloudTestServer(port, max, scavengePeriod, evictionPolicy, _testSupport.getConfiguration());
+        return  new GCloudTestServer(port, max, scavengePeriod, evictionPolicy);
     }
 
     @Test

@@ -19,6 +19,7 @@
 
 package org.eclipse.jetty.server.session;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Set;
 
@@ -26,6 +27,7 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.component.ContainerLifeCycle;
+import org.eclipse.jetty.util.component.DumpableCollection;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 import org.eclipse.jetty.util.thread.Locker.Lock;
@@ -33,22 +35,21 @@ import org.eclipse.jetty.util.thread.Locker.Lock;
 /**
  * AbstractSessionCache
  *
- * A base implementation of the SessionCache interface for managing a set of
+ * A base implementation of the {@link SessionCache} interface for managing a set of
  * Session objects pertaining to a context in memory.
  * 
  * This implementation ensures that multiple requests for the same session id
  * always return the same Session object.
  * 
  * It will delay writing out a session to the SessionDataStore until the
- * last request exists the session. If the SessionDataStore supports passivation
+ * last request exits the session. If the SessionDataStore supports passivation
  * then the session passivation and activation listeners are called appropriately as
- * the session is written. Additionally the session can be evicted from the 
- * AbstractSessionCache after passivation on write.
+ * the session is written. 
  * 
  * This implementation also supports evicting idle Session objects. An idle Session
  * is one that is still valid, has not expired, but has not been accessed by a
  * request for a configurable amount of time.  An idle session will be first
- * passivated before eviction from the cache.
+ * passivated before it is evicted from the cache.
  * 
  */
 public abstract class AbstractSessionCache extends ContainerLifeCycle implements SessionCache
@@ -89,6 +90,10 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
     protected boolean _saveOnInactiveEviction;
     
     
+    /**
+     * If true, a Session whose data cannot be read will be
+     * deleted from the SessionDataStore.
+     */
     protected boolean _removeUnloadableSessions;
     
  
@@ -778,5 +783,13 @@ public abstract class AbstractSessionCache extends ContainerLifeCycle implements
             LOG.warn("Save of new session {} failed", id, e);
         }
         return session;
+    }
+
+
+    @Override
+    public String toString()
+    {
+        return String.format("%s@%x[evict=%d,removeUnloadable=%b,saveOnCreate=%b,saveOnInactiveEvict=%b]",
+                             this.getClass().getName(),this.hashCode(),_evictionPolicy,_removeUnloadableSessions,_saveOnCreate,_saveOnInactiveEviction);
     }
 }

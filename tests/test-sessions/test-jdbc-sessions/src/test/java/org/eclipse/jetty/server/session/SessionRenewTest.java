@@ -30,7 +30,7 @@ public class SessionRenewTest extends AbstractSessionRenewTest
 {
 
     @Override
-    public AbstractTestServer createServer(int port, int max, int scavenge, int evictionPolicy)
+    public AbstractTestServer createServer(int port, int max, int scavenge, int evictionPolicy) throws Exception
     {
         return new JdbcTestServer(port, max, scavenge, evictionPolicy);
     }
@@ -38,7 +38,7 @@ public class SessionRenewTest extends AbstractSessionRenewTest
     
 
     /** 
-     * @see org.eclipse.jetty.server.session.AbstractSessionRenewTest#verifyChange(java.lang.String, java.lang.String)
+     * @see org.eclipse.jetty.server.session.AbstractSessionRenewTest#verifyChange(WebAppContext, java.lang.String, java.lang.String)
      */
     @Override
     public boolean verifyChange(WebAppContext context, String oldSessionId, String newSessionId)

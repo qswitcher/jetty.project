@@ -21,9 +21,11 @@ package org.eclipse.jetty.server;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.net.ssl.SSLEngine;
 
+import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.io.AbstractConnection;
 import org.eclipse.jetty.io.Connection;
 import org.eclipse.jetty.io.EndPoint;
@@ -95,25 +97,25 @@ public abstract class NegotiatingServerConnectionFactory extends AbstractConnect
         if (negotiated.isEmpty())
         {
             // Generate list of protocols that we can negotiate
-            negotiated = new ArrayList<>(connector.getProtocols());
-            for (Iterator<String> i = negotiated.iterator();i.hasNext();)
+            negotiated = connector.getProtocols().stream()
+            .filter(p->
             {
-                String protocol = i.next();
-                // exclude SSL and negotiating protocols
-                ConnectionFactory f = connector.getConnectionFactory(protocol);
-               
-                if ((f instanceof SslConnectionFactory) ||
-                    (f instanceof NegotiatingServerConnectionFactory))
-                {
-                    i.remove();
-                }
-            }
+                ConnectionFactory f=connector.getConnectionFactory(p);
+                return !(f instanceof SslConnectionFactory)&&!(f instanceof NegotiatingServerConnectionFactory);
+            })
+            .collect(Collectors.toList());            
         }
 
-        // if default protocol is not set, then it is the first protocol given
+        // if default protocol is not set, then it is either HTTP/1.1 or 
+        // the first protocol given
         String dft = defaultProtocol;
         if (dft == null && !negotiated.isEmpty())
-            dft = negotiated.get(0);
+        {
+            if (negotiated.contains(HttpVersion.HTTP_1_1.asString()))
+                dft = HttpVersion.HTTP_1_1.asString();
+            else
+                dft = negotiated.get(0);
+        }
 
         SSLEngine engine = null;
         EndPoint ep = endPoint;

@@ -18,13 +18,22 @@
 
 package com.acme.osgi;
 
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Dictionary;
 import java.util.Hashtable;
 
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import org.eclipse.jetty.server.handler.ContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.webapp.WebAppContext;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceRegistration;
 
 /**
  * Bootstrap a webapp
@@ -34,37 +43,53 @@ import org.osgi.framework.BundleContext;
 public class Activator implements BundleActivator
 {
 
+    private ServiceRegistration _srA;
+    private ServiceRegistration _srB;
+
+    public static class TestServlet extends HttpServlet
+    {
+
+        /** 
+         * @see javax.servlet.http.HttpServlet#doGet(javax.servlet.http.HttpServletRequest, javax.servlet.http.HttpServletResponse)
+         */
+        @Override
+        protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException
+        {
+            //report the mimetype of a file
+            String mimetype = req.getServletContext().getMimeType("file.gz");
+            resp.setContentType("text/html");
+            PrintWriter writer = resp.getWriter();
+            writer.write("<html><body><p>MIMETYPE="+mimetype+"</p></body</html>");
+            writer.flush();
+        }
+        
+    }
+
+    
+    
     /**
      * 
      * @param context
      */
     public void start(BundleContext context) throws Exception
     {
-        String serverName = "defaultJettyServer";
-        
-        /* Uncomment to create a different server instance to deploy to. Also change
-         * TestJettyOSGiBootWebAppAsService to use the port 9999
-         
-        Server server = new Server();
-        //do any setup on Server in here
-        serverName = "fooServer";
-        Dictionary serverProps = new Hashtable();
-        //define the unique name of the server instance
-        serverProps.put("managedServerName", serverName);
-        serverProps.put("jetty.http.port", "9999");
-        //let Jetty apply some configuration files to the Server instance
-        serverProps.put("jetty.etc.config.urls", "file:/opt/jetty/etc/jetty.xml,file:/opt/jetty/etc/jetty-selector.xml,file:/opt/jetty/etc/jetty-deployer.xml");
-        //register as an OSGi Service for Jetty to find 
-        context.registerService(Server.class.getName(), server, serverProps);
-        */
-        
-        //Create a webapp context as a Service and target it at the Server created above
+        //Create webappA as a Service and target it at the default server
         WebAppContext webapp = new WebAppContext();
+        webapp.addServlet(new ServletHolder(new TestServlet()), "/mime");
         Dictionary props = new Hashtable();
-        props.put("war",".");
+        props.put("war","webappA");
         props.put("contextPath","/acme");
-        props.put("managedServerName", serverName);
-        context.registerService(ContextHandler.class.getName(),webapp,props);
+        props.put("managedServerName", "defaultJettyServer");
+        _srA = context.registerService(WebAppContext.class.getName(),webapp,props);
+        
+        //Create a second webappB as a Service and target it at a custom Server
+        //deployed by another bundle
+        WebAppContext webappB = new WebAppContext();
+        Dictionary propsB = new Hashtable();
+        propsB.put("war", "webappB");
+        propsB.put("contextPath", "/acme");
+        propsB.put("managedServerName", "fooServer");
+        _srB = context.registerService(WebAppContext.class.getName(), webappB, propsB);
     }
 
     /**
@@ -75,5 +100,7 @@ public class Activator implements BundleActivator
      */
     public void stop(BundleContext context) throws Exception
     {
+        _srA.unregister(); 
+        _srB.unregister();
     }
 }

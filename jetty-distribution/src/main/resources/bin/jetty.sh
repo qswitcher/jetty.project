@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
-#
+
+# LSB Tags
+### BEGIN INIT INFO
+# Provides:          jetty
+# Required-Start:    $local_fs $network
+# Required-Stop:     $local_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Jetty start script.
+# Description:       Start Jetty web server.
+### END INIT INFO
+
 # Startup script for jetty under *nix systems (it works under NT/cygwin too).
 
 ##################################################
@@ -333,24 +344,11 @@ then
 fi
 
 #####################################################
-# See if JETTY_LOGS is defined
+# See if Deprecated JETTY_LOGS is defined
 #####################################################
-if [ -z "$JETTY_LOGS" ] && [ -d $JETTY_BASE/logs ]
-then
-  JETTY_LOGS=$JETTY_BASE/logs
-fi
-if [ -z "$JETTY_LOGS" ] && [ -d $JETTY_HOME/logs ]
-then
-  JETTY_LOGS=$JETTY_HOME/logs
-fi
 if [ "$JETTY_LOGS" ]
 then
-
-  case "`uname`" in
-  CYGWIN*) JETTY_LOGS="`cygpath -w $JETTY_LOGS`";;
-  esac
-
-  JAVA_OPTIONS=(${JAVA_OPTIONS[*]} "-Djetty.logging.dir=$JETTY_LOGS")
+  echo "** WARNING: JETTY_LOGS is Deprecated. Please configure logging within the jetty base." >&2
 fi
 
 #####################################################

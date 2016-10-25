@@ -44,7 +44,6 @@ import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.thread.Invocable.InvocationType;
 
 public class HttpChannelOverHTTP2 extends HttpChannel
 {
@@ -54,6 +53,7 @@ public class HttpChannelOverHTTP2 extends HttpChannel
 
     private boolean _expect100Continue;
     private boolean _delayedUntilContent;
+    private boolean _handled;
 
     public HttpChannelOverHTTP2(Connector connector, HttpConfiguration configuration, EndPoint endPoint, HttpTransportOverHTTP2 transport)
     {
@@ -69,6 +69,18 @@ public class HttpChannelOverHTTP2 extends HttpChannel
     public boolean isExpecting100Continue()
     {
         return _expect100Continue;
+    }
+
+    @Override
+    public void setIdleTimeout(long timeoutMs)
+    {
+        getStream().setIdleTimeout(timeoutMs);
+    }
+
+    @Override
+    public long getIdleTimeout()
+    {
+        return getStream().getIdleTimeout();
     }
 
     public Runnable onRequest(HeadersFrame frame)
@@ -106,6 +118,7 @@ public class HttpChannelOverHTTP2 extends HttpChannel
 
             _delayedUntilContent = getHttpConfiguration().isDelayDispatchUntilContent() &&
                     !endStream && !_expect100Continue;
+            _handled = !_delayedUntilContent;
 
             if (LOG.isDebugEnabled())
             {
@@ -113,7 +126,7 @@ public class HttpChannelOverHTTP2 extends HttpChannel
                 LOG.debug("HTTP2 Request #{}/{}, delayed={}:{}{} {} {}{}{}",
                         stream.getId(), Integer.toHexString(stream.getSession().hashCode()),
                         _delayedUntilContent, System.lineSeparator(),
-                        request.getMethod(), request.getURI(), request.getVersion(),
+                        request.getMethod(), request.getURI(), request.getHttpVersion(),
                         System.lineSeparator(), fields);
             }
 
@@ -144,7 +157,7 @@ public class HttpChannelOverHTTP2 extends HttpChannel
                 Stream stream = getStream();
                 LOG.debug("HTTP2 PUSH Request #{}/{}:{}{} {} {}{}{}",
                         stream.getId(), Integer.toHexString(stream.getSession().hashCode()), System.lineSeparator(),
-                        request.getMethod(), request.getURI(), request.getVersion(),
+                        request.getMethod(), request.getURI(), request.getHttpVersion(),
                         System.lineSeparator(), request.getFields());
             }
 
@@ -173,6 +186,7 @@ public class HttpChannelOverHTTP2 extends HttpChannel
     {
         _expect100Continue = false;
         _delayedUntilContent = false;
+        _handled = false;
         super.recycle();
         getHttpTransport().recycle();
     }
@@ -185,13 +199,24 @@ public class HttpChannelOverHTTP2 extends HttpChannel
         {
             Stream stream = getStream();
             LOG.debug("HTTP2 Commit Response #{}/{}:{}{} {} {}{}{}",
-                    stream.getId(), Integer.toHexString(stream.getSession().hashCode()), System.lineSeparator(), info.getVersion(), info.getStatus(), info.getReason(),
+                    stream.getId(), Integer.toHexString(stream.getSession().hashCode()), System.lineSeparator(), info.getHttpVersion(), info.getStatus(), info.getReason(),
                     System.lineSeparator(), info.getFields());
         }
     }
 
-    public Runnable requestContent(DataFrame frame, final Callback callback)
+    public Runnable onRequestContent(DataFrame frame, final Callback callback)
     {
+        Stream stream = getStream();
+        if (stream.isReset())
+        {
+            // Consume previously queued content to
+            // enlarge the session flow control window.
+            consumeInput();
+            // Consume immediately this content.
+            callback.succeeded();
+            return null;
+        }
+
         // We must copy the data since we do not know when the
         // application will consume the bytes (we queue them by
         // calling onContent()), and the parsing will continue
@@ -234,7 +259,6 @@ public class HttpChannelOverHTTP2 extends HttpChannel
 
         if (LOG.isDebugEnabled())
         {
-            Stream stream = getStream();
             LOG.debug("HTTP2 Request #{}/{}: {} bytes of {} content, handle: {}",
                     stream.getId(),
                     Integer.toHexString(stream.getSession().hashCode()),
@@ -243,10 +267,44 @@ public class HttpChannelOverHTTP2 extends HttpChannel
                     handle);
         }
 
-        boolean delayed = _delayedUntilContent;
+        boolean wasDelayed = _delayedUntilContent;
         _delayedUntilContent = false;
+        if (wasDelayed)
+            _handled = true;
+        return handle || wasDelayed ? this : null;
+    }
 
-        return handle || delayed ? this : null;
+    public boolean isRequestHandled()
+    {
+        return _handled;
+    }
+
+    public boolean onStreamTimeout(Throwable failure)
+    {
+        if (!_handled)
+            return true;
+
+        HttpInput input = getRequest().getHttpInput();
+        boolean readFailed = input.failed(failure);
+        if (readFailed)
+            handle();
+
+        boolean writeFailed = getHttpTransport().onStreamTimeout(failure);
+
+        return readFailed || writeFailed;
+    }
+
+    public void onFailure(Throwable failure)
+    {
+        if (onEarlyEOF())
+            handle();
+        else
+            getState().asyncError(failure);
+    }
+
+    protected void consumeInput()
+    {
+        getRequest().getHttpInput().consumeAll();
     }
 
     /**

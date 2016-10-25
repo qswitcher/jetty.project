@@ -17,6 +17,7 @@
 //
 
 package org.eclipse.jetty.util;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -27,6 +28,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+
+import org.eclipse.jetty.util.component.ContainerLifeCycle;
+import org.eclipse.jetty.util.component.Dumpable;
 
 
 /**
@@ -45,7 +49,7 @@ import java.util.TreeSet;
  * 
  * @param <T> The type to be sorted. It must be able to be added to a {@link HashSet}
  */
-public class TopologicalSort<T>
+public class TopologicalSort<T> implements Dumpable
 {
     private final Map<T,Set<T>> _dependencies = new HashMap<>();
 
@@ -125,8 +129,15 @@ public class TopologicalSort<T>
                 ordered_deps.addAll(dependencies);
                 
                 // recursively visit each dependency
-                for (T d:ordered_deps)
-                    visit(d,visited,sorted,comparator);
+                try
+                {
+                    for (T d:ordered_deps)
+                        visit(d,visited,sorted,comparator);
+                }
+                catch (CyclicException e)
+                {
+                    throw new CyclicException(item,e);
+                }
             }
             
             // Now that we have visited all our dependencies, they and their 
@@ -137,7 +148,7 @@ public class TopologicalSort<T>
         else if (!sorted.contains(item))
             // If we have already visited an item, but it has not yet been put in the
             // sorted list, then we must be in a cycle!
-            throw new IllegalStateException("cyclic at "+item);
+            throw new CyclicException(item);
     }
     
     
@@ -181,5 +192,31 @@ public class TopologicalSort<T>
     public String toString()
     {
         return "TopologicalSort "+_dependencies;
+    }
+
+    @Override
+    public String dump()
+    {
+        return ContainerLifeCycle.dump(this);
+    }
+
+    @Override
+    public void dump(Appendable out, String indent) throws IOException
+    {
+        out.append(String.format("TopologicalSort@%x%n",hashCode()));
+        ContainerLifeCycle.dump(out, indent,_dependencies.entrySet());
+    }
+    
+    private static class CyclicException extends IllegalStateException
+    {
+        CyclicException(Object item)
+        {
+            super("cyclic at "+item);
+        }
+        
+        CyclicException(Object item,CyclicException e)
+        {
+            super("cyclic at "+item,e);
+        }
     }
 }

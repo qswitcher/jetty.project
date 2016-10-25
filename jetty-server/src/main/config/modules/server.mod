@@ -5,6 +5,7 @@ Enables the core Jetty server on the classpath.
 jvm
 ext
 resources
+logging
 
 [lib]
 lib/servlet-api-3.1.jar
@@ -69,6 +70,9 @@ etc/jetty.xml
 ### Server configuration
 ## Whether ctrl+c on the console gracefully stops the Jetty server
 # jetty.server.stopAtShutdown=true
+
+## Timeout in ms to apply when stopping the server gracefully
+# jetty.server.stopTimeout=5000
 
 ## Dump the state of the Jetty server, components, and webapps after startup
 # jetty.server.dumpAfterStart=false

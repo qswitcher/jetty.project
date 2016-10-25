@@ -19,8 +19,10 @@
 package org.eclipse.jetty.start;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,7 +55,7 @@ import java.util.stream.Collectors;
  * A module may be enabled, either directly by name or transiently via a dependency
  * from another module by name or provided capability.
  */
-public class Module
+public class Module implements Comparable<Module>
 {
     private static final String VERSION_UNSPECIFIED = "9.2";
     private static Pattern MOD_NAME = Pattern.compile("^(.*)\\.mod",Pattern.CASE_INSENSITIVE);
@@ -93,6 +95,9 @@ public class Module
     
     /** List of provides for this Module */
     private final Set<String> _provides=new HashSet<>();
+    
+    /** List of tags for this Module */
+    private final List<String> _tags=new ArrayList<>();
     
     /** Boolean true if directly enabled, false if all selections are transitive */
     private boolean _notTransitive;
@@ -326,6 +331,10 @@ public class Module
                             case "FILES":
                                 _files.add(line);
                                 break;
+                            case "TAG":
+                            case "TAGS":
+                                _tags.add(line);
+                                break;
                             case "DEFAULTS": // old name introduced in 9.2.x
                             case "INI": // new name for 9.3+
                                 _defaultConfig.add(line);
@@ -344,7 +353,7 @@ public class Module
                                 _license.add(line);
                                 break;
                             case "NAME":
-                                StartLog.warn("Deprecated [Name] used in %s",basehome.toShortForm(_path));
+                                StartLog.warn("Deprecated [name] used in %s",basehome.toShortForm(_path));
                                 _provides.add(line);
                                 break;
                             case "PROVIDE":
@@ -368,7 +377,7 @@ public class Module
                                 _xmls.add(line);
                                 break;
                             default:
-                                throw new IOException("Unrecognized Module section: [" + sectionType + "]");
+                                throw new IOException("Unrecognized module section: [" + sectionType + "]");
                         }
                     }
                 }
@@ -402,16 +411,25 @@ public class Module
     public String toString()
     {
         StringBuilder str = new StringBuilder();
-        str.append("Module[").append(getName());
+        str.append(getName());
+        char sep='{';
+        if (isDynamic())
+        {
+            str.append(sep).append("dynamic");
+            sep=',';
+        }
         if (isEnabled())
         {
-            str.append(",enabled");
+            str.append(sep).append("enabled");
+            sep=',';
         }
         if (isTransitive())
         {
-            str.append(",transitive");
+            str.append(sep).append("transitive");
+            sep=',';
         }
-        str.append(']');
+        if (sep!='{')
+            str.append('}');
         return str.toString();
     }
 
@@ -435,6 +453,16 @@ public class Module
         return _description;
     }
     
+    public List<String> getTags()
+    {
+        return _tags;
+    }
+    
+    public String getPrimaryTag()
+    {
+        return _tags.isEmpty()?"*":_tags.get(0);
+    }
+    
     public boolean isEnabled()
     {
         return !_enables.isEmpty();
@@ -446,9 +474,9 @@ public class Module
     }
 
     /**
-     * @param source
-     * @param transitive
-     * @return True if the module was not previously enabled
+     * @param source String describing where the module was enabled from
+     * @param transitive True if the enable is transitive
+     * @return true if the module was not previously enabled
      */
     public boolean enable(String source,boolean transitive)
     {
@@ -476,5 +504,30 @@ public class Module
     public boolean isTransitive()
     {
         return isEnabled() && !_notTransitive;
+    }
+
+    public void writeIniSection(BufferedWriter writer)
+    {
+        PrintWriter out = new PrintWriter(writer);
+        out.println("# --------------------------------------- ");
+        out.println("# Module: " + getName());
+        for (String line : getDescription())
+            out.append("# ").println(line);
+        out.println("# --------------------------------------- ");
+        out.println("--module=" + getName());
+        out.println();
+        for (String line : getIniTemplate())
+            out.println(line);
+        out.println();
+        out.flush();
+    }
+
+    @Override
+    public int compareTo(Module m)
+    {
+        int by_tag = getPrimaryTag().compareTo(m.getPrimaryTag());
+        if (by_tag!=0)
+            return by_tag;
+        return getName().compareTo(m.getName());
     }
 }

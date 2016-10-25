@@ -19,10 +19,13 @@
 package org.eclipse.jetty.memcached.session;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.List;
 
 import org.eclipse.jetty.server.session.SessionContext;
 import org.eclipse.jetty.server.session.SessionData;
 import org.eclipse.jetty.server.session.SessionDataMap;
+import org.eclipse.jetty.util.component.AbstractLifeCycle;
 
 import net.rubyeye.xmemcached.MemcachedClient;
 import net.rubyeye.xmemcached.XMemcachedClientBuilder;
@@ -34,20 +37,21 @@ import net.rubyeye.xmemcached.XMemcachedClientBuilder;
  *
  * Uses memcached as a cache for SessionData.
  */
-public class MemcachedSessionDataMap implements SessionDataMap
+public class MemcachedSessionDataMap extends AbstractLifeCycle implements SessionDataMap
 {
     public static final String DEFAULT_HOST = "localhost";
     public static final String DEFAULT_PORT = "11211";
     protected MemcachedClient _client;
     protected int _expirySec = 0;
+    protected boolean _heartbeats = true;
     protected XMemcachedClientBuilder _builder;
 
     
     
 
     /**
-     * @param host
-     * @param port
+     * @param host address of memcache server
+     * @param port address of memcache server
      */
     public MemcachedSessionDataMap(String host, String port)
     {
@@ -57,6 +61,16 @@ public class MemcachedSessionDataMap implements SessionDataMap
     }
     
     
+    public MemcachedSessionDataMap (List<InetSocketAddress> addresses)
+    {
+        _builder = new XMemcachedClientBuilder(addresses);
+    }
+    
+    
+    public MemcachedSessionDataMap (List<InetSocketAddress> addresses, int[] weights)
+    {
+        _builder = new XMemcachedClientBuilder(addresses, weights);
+    }
     
     /**
      * @return the builder
@@ -79,6 +93,18 @@ public class MemcachedSessionDataMap implements SessionDataMap
     
 
 
+    public boolean isHeartbeats()
+    {
+        return _heartbeats;
+    }
+
+
+    public void setHeartbeats(boolean heartbeats)
+    {
+        _heartbeats = heartbeats;
+    }
+
+
     /** 
      * @see org.eclipse.jetty.server.session.SessionDataMap#initialize(org.eclipse.jetty.server.session.SessionContext)
      */
@@ -88,10 +114,10 @@ public class MemcachedSessionDataMap implements SessionDataMap
         try
         {
             _client = _builder.build();
+            _client.setEnableHeartBeat(isHeartbeats());
         }
         catch (IOException e)
         {
-            e.printStackTrace();
             throw new IllegalStateException(e);
         }
     }
@@ -126,4 +152,19 @@ public class MemcachedSessionDataMap implements SessionDataMap
         _client.delete(id);
         return true; //delete returns false if the value didn't exist
     }
+
+
+
+    @Override
+    protected void doStop() throws Exception
+    {
+        super.doStop();
+        if (_client != null)
+        {
+            _client.shutdown();
+            _client = null;
+        }
+    }
+    
+    
 }

@@ -19,6 +19,7 @@
 package org.eclipse.jetty.server;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 
@@ -28,8 +29,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.servlet.AsyncContext;
@@ -39,7 +38,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.eclipse.jetty.server.HttpOutput.Interceptor;
-import org.eclipse.jetty.server.HttpOutputTest.ChainedInterceptor;
+import org.eclipse.jetty.server.LocalConnector.LocalEndPoint;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.eclipse.jetty.server.handler.HotSwapHandler;
 import org.eclipse.jetty.util.BufferUtil;
@@ -90,7 +89,7 @@ public class HttpOutputTest
     @Test
     public void testSimple() throws Exception
     {
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
     }
     
@@ -99,7 +98,7 @@ public class HttpOutputTest
     @Test
     public void testByteUnknown() throws Exception
     {
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
     }
     
@@ -114,7 +113,7 @@ public class HttpOutputTest
         _handler._content=ByteBuffer.wrap(buffer);
         _handler._content.limit(12*1024);
         _handler._content.position(4*1024);
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("\r\nXXXXXXXXXXXXXXXXXXXXXXXXXXX"));
         
@@ -129,7 +128,7 @@ public class HttpOutputTest
     {
         Resource simple = Resource.newClassPathResource("simple/simple.txt");
         _handler._contentInputStream=simple.getInputStream();
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length: 11"));
     }
@@ -139,9 +138,10 @@ public class HttpOutputTest
     {
         Resource big = Resource.newClassPathResource("simple/big.txt");
         _handler._contentInputStream=big.getInputStream();
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -157,16 +157,23 @@ public class HttpOutputTest
                 return filled;
             }
         };
-        String response=_connector.getResponses(
+        LocalEndPoint endp=_connector.executeRequest(
             "GET / HTTP/1.1\nHost: localhost:80\n\n"+
             "GET / HTTP/1.1\nHost: localhost:80\nConnection: close\n\n"
         );
-        response=response.substring(0,response.lastIndexOf("HTTP/1.1 200 OK"));
         
+        String response = endp.getResponse();
+                
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Transfer-Encoding: chunked"));
+        assertThat(response, containsString("1\tThis is a big file"));
         assertThat(response,containsString("400\tThis is a big file"));
         assertThat(response,containsString("\r\n0\r\n"));
+        
+        response = endp.getResponse();
+        assertThat(response,containsString("HTTP/1.1 200 OK"));
+        assertThat(response,containsString("Connection: close"));
+
     }
 
     @Test
@@ -174,7 +181,7 @@ public class HttpOutputTest
     {
         Resource simple = Resource.newClassPathResource("simple/simple.txt");
         _handler._contentChannel=simple.getReadableByteChannel();
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length: 11"));
     }
@@ -184,10 +191,10 @@ public class HttpOutputTest
     {
         Resource big = Resource.newClassPathResource("simple/big.txt");
         _handler._contentChannel=big.getReadableByteChannel();
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -195,10 +202,10 @@ public class HttpOutputTest
     {
         Resource big = Resource.newClassPathResource("simple/big.txt");
         _handler._content=BufferUtil.toBuffer(big,true);
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -206,10 +213,10 @@ public class HttpOutputTest
     {
         Resource big = Resource.newClassPathResource("simple/big.txt");
         _handler._content=BufferUtil.toBuffer(big,false);
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     
@@ -249,15 +256,21 @@ public class HttpOutputTest
             }
         };
         
-        String response=_connector.getResponses(
+        LocalEndPoint endp=_connector.executeRequest(
             "GET / HTTP/1.1\nHost: localhost:80\n\n"+
             "GET / HTTP/1.1\nHost: localhost:80\nConnection: close\n\n"
         );
-        response=response.substring(0,response.lastIndexOf("HTTP/1.1 200 OK"));
         
+        String response = endp.getResponse();        
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Transfer-Encoding: chunked"));
+        assertThat(response, containsString("1\tThis is a big file"));
+        assertThat(response, containsString("400\tThis is a big file"));
         assertThat(response,containsString("\r\n0\r\n"));
+        
+        response = endp.getResponse(); 
+        assertThat(response,containsString("HTTP/1.1 200 OK"));
+        assertThat(response,containsString("Connection: close"));
     }
 
     @Test
@@ -268,10 +281,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[1];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     @Test
@@ -282,10 +295,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[8];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -296,10 +309,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[4000];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -310,10 +323,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[8192];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     @Test
@@ -324,10 +337,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[1];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     @Test
@@ -338,10 +351,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[8];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -352,10 +365,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[4000];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     @Test
@@ -366,10 +379,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[8192];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     
@@ -383,7 +396,7 @@ public class HttpOutputTest
             _handler._content.put(i,(byte)'x');
         _handler._arrayBuffer=new byte[8192];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
     }
@@ -397,10 +410,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._byteBuffer=BufferUtil.allocate(8);
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     @Test
@@ -411,10 +424,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._byteBuffer=BufferUtil.allocate(4000);
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -425,10 +438,10 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._byteBuffer=BufferUtil.allocate(8192);
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
 
@@ -441,10 +454,10 @@ public class HttpOutputTest
         _handler._arrayBuffer=new byte[1];
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -456,10 +469,10 @@ public class HttpOutputTest
         _handler._arrayBuffer=new byte[8];
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -471,10 +484,10 @@ public class HttpOutputTest
         _handler._arrayBuffer=new byte[4000];
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -486,10 +499,10 @@ public class HttpOutputTest
         _handler._arrayBuffer=new byte[8192];
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     
@@ -504,7 +517,7 @@ public class HttpOutputTest
         _handler._arrayBuffer=new byte[8192];
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length"));
     }
@@ -520,10 +533,10 @@ public class HttpOutputTest
         _handler._byteBuffer=BufferUtil.allocate(8);
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
 
     @Test
@@ -535,10 +548,10 @@ public class HttpOutputTest
         _handler._byteBuffer=BufferUtil.allocate(4000);
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -550,10 +563,26 @@ public class HttpOutputTest
         _handler._byteBuffer=BufferUtil.allocate(8192);
         _handler._async=true;
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,containsString("400\tThis is a big file"));
+        assertThat(response, endsWith(toUTF8String(big)));
+    }
+
+    @Test
+    public void testAsyncWriteBufferLargeDirect()
+            throws Exception
+    {
+        final Resource big = Resource.newClassPathResource("simple/big.txt");
+        _handler._writeLengthIfKnown = false;
+        _handler._content = BufferUtil.toBuffer(big, true);
+        _handler._byteBuffer = BufferUtil.allocateDirect(8192);
+        _handler._async = true;
+
+        String response = _connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        assertThat(response, containsString("HTTP/1.1 200 OK"));
+        assertThat(response, Matchers.not(containsString("Content-Length")));
+        assertThat(response, endsWith(toUTF8String(big)));
     }
     
     @Test
@@ -566,11 +595,12 @@ public class HttpOutputTest
         _handler._async=true;
         
         int start=_handler._owp.get();
-        String response=_connector.getResponses("HEAD / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("HEAD / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(_handler._owp.get()-start,Matchers.greaterThan(0));
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
-        assertThat(response,Matchers.not(containsString("400\tThis is a big file")));
+        assertThat(response, Matchers.not(containsString("1\tThis is a big file")));
+        assertThat(response, Matchers.not(containsString("400\tThis is a big file")));
     }
 
     @Test
@@ -583,7 +613,7 @@ public class HttpOutputTest
         _handler._content=BufferUtil.toBuffer(big,false);
         _handler._arrayBuffer=new byte[4000];
         
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length: 11"));
         assertThat(response,containsString("simple text"));
@@ -600,7 +630,7 @@ public class HttpOutputTest
         _handler._arrayBuffer=new byte[4000];
 
         int start=_handler._owp.get();
-        String response=_connector.getResponses("HEAD / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("HEAD / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(_handler._owp.get()-start,Matchers.equalTo(1));
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,containsString("Content-Length: 11"));
@@ -644,10 +674,16 @@ public class HttpOutputTest
             }
         };
            
-        String response=_connector.getResponses("GET / HTTP/1.0\nHost: localhost:80\n\n");
+        String response=_connector.getResponse("GET / HTTP/1.0\nHost: localhost:80\n\n");
         assertThat(response,containsString("HTTP/1.1 200 OK"));
         assertThat(response,Matchers.not(containsString("Content-Length")));
         assertThat(response,containsString("400\tTHIS IS A BIGGER FILE"));
+    }
+
+    private static String toUTF8String(Resource resource)
+            throws IOException
+    {
+        return BufferUtil.toUTF8String(BufferUtil.toBuffer(resource, false));
     }
     
     interface ChainedInterceptor extends HttpOutput.Interceptor 
@@ -767,6 +803,8 @@ public class HttpOutputTest
                     final AsyncContext async = request.startAsync();
                     out.setWriteListener(new WriteListener()
                     {
+                        private boolean isFirstWrite = true;
+
                         @Override
                         public void onWritePossible() throws IOException
                         {
@@ -774,6 +812,7 @@ public class HttpOutputTest
                             
                             while (out.isReady())
                             {
+                                Assert.assertTrue(isFirstWrite || !_byteBuffer.hasRemaining());
                                 Assert.assertTrue(out.isReady());
                                 if(BufferUtil.isEmpty(_content))
                                 {
@@ -785,6 +824,7 @@ public class HttpOutputTest
                                 BufferUtil.put(_content,_byteBuffer);
                                 BufferUtil.flipToFlush(_byteBuffer,0);
                                 out.write(_byteBuffer);
+                                isFirstWrite = false;
                             }
                         }
 

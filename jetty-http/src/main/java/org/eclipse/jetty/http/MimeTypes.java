@@ -18,21 +18,26 @@
 
 package org.eclipse.jetty.http;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.MissingResourceException;
+import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.Set;
 
 import org.eclipse.jetty.util.ArrayTrie;
 import org.eclipse.jetty.util.BufferUtil;
+import org.eclipse.jetty.util.Loader;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.Trie;
 import org.eclipse.jetty.util.log.Log;
@@ -198,34 +203,80 @@ public class MimeTypes
             }
         }
 
-        try
+        String resourceName = "org/eclipse/jetty/http/mime.properties";
+        try (InputStream stream = MimeTypes.class.getClassLoader().getResourceAsStream(resourceName))
         {
-            ResourceBundle mime = ResourceBundle.getBundle("org/eclipse/jetty/http/mime");
-            Enumeration<String> i = mime.getKeys();
-            while(i.hasMoreElements())
+            if (stream == null)
             {
-                String ext = i.nextElement();
-                String m = mime.getString(ext);
-                __dftMimeMap.put(StringUtil.asciiToLowerCase(ext),normalizeMimeType(m));
+                LOG.warn("Missing mime-type resource: {}", resourceName);
+            }
+            else
+            {
+                try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8))
+                {
+                    Properties props = new Properties();
+                    props.load(reader);
+                    props.stringPropertyNames().stream()
+                    .filter(x->x!=null)
+                    .forEach(x->
+                    __dftMimeMap.put(StringUtil.asciiToLowerCase(x), normalizeMimeType(props.getProperty(x))));
+
+                    if (__dftMimeMap.size()==0)
+                    {
+                        LOG.warn("Empty mime types at {}", resourceName);
+                    }
+                    else if (__dftMimeMap.size()<props.keySet().size())
+                    {
+                        LOG.warn("Duplicate or null mime-type extension in resource: {}", resourceName);
+                    }  
+                }
+                catch (IOException e)
+                {
+                    LOG.warn(e.toString());
+                    LOG.debug(e);
+                }
+
             }
         }
-        catch(MissingResourceException e)
+        catch (IOException e)
         {
             LOG.warn(e.toString());
             LOG.debug(e);
         }
+        
 
-        try
+        resourceName = "org/eclipse/jetty/http/encoding.properties";
+        try (InputStream stream = MimeTypes.class.getClassLoader().getResourceAsStream(resourceName))
         {
-            ResourceBundle encoding = ResourceBundle.getBundle("org/eclipse/jetty/http/encoding");
-            Enumeration<String> i = encoding.getKeys();
-            while(i.hasMoreElements())
+            if (stream == null)
+                LOG.warn("Missing encoding resource: {}", resourceName);
+            else
             {
-                String type = i.nextElement();
-                __encodings.put(type,encoding.getString(type));
+                try (InputStreamReader reader = new InputStreamReader(stream, StandardCharsets.UTF_8))
+                {
+                    Properties props = new Properties();
+                    props.load(reader);
+                    props.stringPropertyNames().stream()
+                    .filter(t->t!=null)
+                    .forEach(t->__encodings.put(t, props.getProperty(t)));
+
+                    if (__encodings.size()==0)
+                    {
+                        LOG.warn("Empty encodings at {}", resourceName);
+                    }
+                    else if (__encodings.size()<props.keySet().size())
+                    {
+                        LOG.warn("Null or duplicate encodings in resource: {}", resourceName);
+                    }
+                }
+                catch (IOException e)
+                {
+                    LOG.warn(e.toString());
+                    LOG.debug(e);
+                }
             }
         }
-        catch(MissingResourceException e)
+        catch (IOException e)
         {
             LOG.warn(e.toString());
             LOG.debug(e);

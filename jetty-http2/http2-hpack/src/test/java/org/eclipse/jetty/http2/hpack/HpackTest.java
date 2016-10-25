@@ -18,10 +18,6 @@
 
 package org.eclipse.jetty.http2.hpack;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
-
 import java.nio.ByteBuffer;
 
 import org.eclipse.jetty.http.BadMessageException;
@@ -37,6 +33,10 @@ import org.eclipse.jetty.http.PreEncodedHttpField;
 import org.eclipse.jetty.util.BufferUtil;
 import org.junit.Assert;
 import org.junit.Test;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
 
 public class HpackTest
 {
@@ -54,6 +54,7 @@ public class HpackTest
         HttpFields fields0 = new HttpFields();
         fields0.add(HttpHeader.CONTENT_TYPE,"text/html");
         fields0.add(HttpHeader.CONTENT_LENGTH,"1024");
+        fields0.add(new HttpField(HttpHeader.CONTENT_ENCODING,(String)null));
         fields0.add(ServerJetty);
         fields0.add(XPowerJetty);
         fields0.add(Date);
@@ -65,7 +66,7 @@ public class HpackTest
         encoder.encode(buffer,original0);
         BufferUtil.flipToFlush(buffer,0);
         Response decoded0 = (Response)decoder.decode(buffer);
-
+        original0.getFields().put(new HttpField(HttpHeader.CONTENT_ENCODING,""));
         assertMetadataSame(original0,decoded0);
         
         // Same again?
@@ -79,9 +80,10 @@ public class HpackTest
         HttpFields fields1 = new HttpFields();
         fields1.add(HttpHeader.CONTENT_TYPE,"text/plain");
         fields1.add(HttpHeader.CONTENT_LENGTH,"1234");
+        fields1.add(HttpHeader.CONTENT_ENCODING," ");
         fields1.add(ServerJetty);
-        fields0.add(XPowerJetty);
-        fields0.add(Date);
+        fields1.add(XPowerJetty);
+        fields1.add(Date);
         fields1.add("Custom-Key","Other-Value");
         Response original1 = new MetaData.Response(HttpVersion.HTTP_2,200,fields1);
 
@@ -99,7 +101,7 @@ public class HpackTest
     public void encodeDecodeTooLargeTest()
     {
         HpackEncoder encoder = new HpackEncoder();
-        HpackDecoder decoder = new HpackDecoder(4096,101);
+        HpackDecoder decoder = new HpackDecoder(4096,164);
         ByteBuffer buffer = BufferUtil.allocate(16*1024);
         
         HttpFields fields0 = new HttpFields();
@@ -130,7 +132,7 @@ public class HpackTest
         }
         catch(BadMessageException e)
         {
-            assertEquals(HttpStatus.REQUEST_ENTITY_TOO_LARGE_413,e.getCode());
+            assertEquals(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431,e.getCode());
         }
     }
 
@@ -185,7 +187,7 @@ public class HpackTest
     private void assertMetadataSame(MetaData expected, MetaData actual)
     {
         assertThat("Metadata.contentLength",actual.getContentLength(),is(expected.getContentLength()));
-        assertThat("Metadata.version" + ".version", actual.getVersion(), is(expected.getVersion()));
+        assertThat("Metadata.version" + ".version", actual.getHttpVersion(),is(expected.getHttpVersion()));
         assertHttpFieldsSame("Metadata.fields",expected.getFields(),actual.getFields());
     }
 

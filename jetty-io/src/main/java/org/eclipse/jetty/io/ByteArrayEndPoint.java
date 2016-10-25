@@ -28,11 +28,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
-import org.eclipse.jetty.util.ArrayQueue;
 import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
@@ -81,7 +81,7 @@ public class ByteArrayEndPoint extends AbstractEndPoint
 
     private final Locker _locker = new Locker();
     private final Condition _hasOutput = _locker.newCondition();
-    private final Queue<ByteBuffer> _inQ = new ArrayQueue<>();
+    private final Queue<ByteBuffer> _inQ = new ArrayDeque<>();
     private ByteBuffer _out;
     private boolean _growOutput;
 
@@ -143,6 +143,28 @@ public class ByteArrayEndPoint extends AbstractEndPoint
         onOpen();
     }
     
+    /* ------------------------------------------------------------ */
+    @Override
+    public void doShutdownOutput()
+    {
+        super.doShutdownOutput(); 
+        try(Locker.Lock lock = _locker.lock())
+        {
+            _hasOutput.signalAll();
+        }  
+    }
+
+    /* ------------------------------------------------------------ */
+    @Override
+    public void doClose()
+    {
+        super.doClose();
+        try(Locker.Lock lock = _locker.lock())
+        {
+            _hasOutput.signalAll();
+        }
+    }
+
     /* ------------------------------------------------------------ */
     @Override
     public InetSocketAddress getLocalAddress()
@@ -303,7 +325,7 @@ public class ByteArrayEndPoint extends AbstractEndPoint
         getWriteFlusher().completeWrite();
         return b;
     }
-    
+
     /* ------------------------------------------------------------ */
     /** Wait for some output
      * @param time Time to wait
@@ -317,9 +339,10 @@ public class ByteArrayEndPoint extends AbstractEndPoint
 
         try(Locker.Lock lock = _locker.lock())
         {
-            if (BufferUtil.isEmpty(_out))
+            while (BufferUtil.isEmpty(_out) && !isOutputShutdown())
+            {
                 _hasOutput.await(time,unit);
-               
+            }
             b=_out;
             _out=BufferUtil.allocate(b.capacity());
         }
@@ -509,5 +532,20 @@ public class ByteArrayEndPoint extends AbstractEndPoint
         _growOutput=growOutput;
     }
 
+    /* ------------------------------------------------------------ */
+    @Override
+    public String toString()
+    {
+        int q;
+        ByteBuffer b;
+        String o;
+        try(Locker.Lock lock = _locker.lock())
+        {
+            q=_inQ.size();
+            b=_inQ.peek();
+            o=BufferUtil.toDetailString(_out);
+        }
+        return String.format("%s[q=%d,q[0]=%s,o=%s]",super.toString(),q,b,o);
+    }
 
 }

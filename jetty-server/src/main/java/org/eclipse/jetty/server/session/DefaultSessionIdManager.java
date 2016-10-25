@@ -31,20 +31,25 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.SessionIdManager;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
+import org.eclipse.jetty.util.component.ContainerLifeCycle;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
 
 
 /**
- * AbstractSessionIdManager
+ * DefaultSessionIdManager
  * 
  * Manages session ids to ensure each session id within a context is unique, and that
  * session ids can be shared across contexts (but not session contents).
  * 
  * There is only 1 session id manager per Server instance.
+ * 
+ * Runs a HouseKeeper thread to periodically check for expired Sessions.
+ * 
+ * @see HouseKeeper
  */
-public class DefaultSessionIdManager extends AbstractLifeCycle implements SessionIdManager
+public class DefaultSessionIdManager extends ContainerLifeCycle implements SessionIdManager
 {
     private  final static Logger LOG = Log.getLogger("org.eclipse.jetty.server.session");
     
@@ -59,6 +64,7 @@ public class DefaultSessionIdManager extends AbstractLifeCycle implements Sessio
     protected long _reseed=100000L;
     protected Server _server;
     protected HouseKeeper _houseKeeper;
+    protected boolean _ownHouseKeeper;
     
 
     /* ------------------------------------------------------------ */
@@ -108,8 +114,9 @@ public class DefaultSessionIdManager extends AbstractLifeCycle implements Sessio
      */
     public void setSessionHouseKeeper (HouseKeeper houseKeeper)
     {
+        updateBean(_houseKeeper, houseKeeper);
         _houseKeeper = houseKeeper;
-        _houseKeeper.setSessionIdManager(this);
+        _houseKeeper.setSessionIdManager(this);    
     }
    
     
@@ -332,16 +339,18 @@ public class DefaultSessionIdManager extends AbstractLifeCycle implements Sessio
         {
             String inst = System.getenv("JETTY_WORKER_INSTANCE");
             _workerName = "node"+ (inst==null?"0":inst);
-            LOG.warn("No workerName configured for DefaultSessionIdManager, using {}",_workerName);
         }
         
+        LOG.info("DefaultSessionIdManager workerName={}",_workerName);
         _workerAttr=(_workerName!=null && _workerName.startsWith("$"))?_workerName.substring(1):null;
 
         if (_houseKeeper == null)
         {
             LOG.warn("No SessionScavenger set, using defaults");
+            _ownHouseKeeper = true;
             _houseKeeper = new HouseKeeper();
             _houseKeeper.setSessionIdManager(this);
+            addBean(_houseKeeper,true);
         }
 
         _houseKeeper.start();
@@ -355,6 +364,11 @@ public class DefaultSessionIdManager extends AbstractLifeCycle implements Sessio
     protected void doStop() throws Exception
     {
         _houseKeeper.stop();
+        if (_ownHouseKeeper)
+        {
+            _houseKeeper = null;
+        }
+        _random = null;
     }
 
     /* ------------------------------------------------------------ */
@@ -495,4 +509,15 @@ public class DefaultSessionIdManager extends AbstractLifeCycle implements Sessio
         }
         return handlers;
     }
+
+    /** 
+     * @see java.lang.Object#toString()
+     */
+    @Override
+    public String toString()
+    {
+        return String.format("%s[worker=%s]", super.toString(),_workerName);
+    }
+    
+    
 }

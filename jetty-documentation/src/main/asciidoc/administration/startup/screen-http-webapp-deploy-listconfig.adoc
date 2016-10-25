@@ -14,35 +14,36 @@
 //  You may elect to redistribute this code under either of these licenses.
 //  ========================================================================
 
-[source, screen]
+[source, screen, subs="{sub-order}"]
 ....
-[mybase]$ java -jar /opt/jetty-distribution/start.jar --list-config
+[mybase]$ java -jar ../start.jar --list-config
 
 Java Environment:
 -----------------
- java.home = /lib/jvm/jdk-8u31-x64/jre
+ java.home = /Library/Java/JavaVirtualMachines/jdk1.8.0_92.jdk/Contents/Home/jre
  java.vm.vendor = Oracle Corporation
- java.vm.version = 25.31-b07
+ java.vm.version = 25.92-b14
  java.vm.name = Java HotSpot(TM) 64-Bit Server VM
  java.vm.info = mixed mode
  java.runtime.name = Java(TM) SE Runtime Environment
- java.runtime.version = 1.8.0_31-b13
- java.io.tmpdir = /tmp
- user.dir = /home/jetty/mybase
+ java.runtime.version = 1.8.0_92-b14
+ java.io.tmpdir = /var/folders/h6/yb_lbnnn11g0y1jjlvqg631h0000gn/T/
+ user.dir = /Users/staff/installs/repository/jetty-distribution-9.4.0/mybase
  user.language = en
  user.country = US
 
 Jetty Environment:
 -----------------
- jetty.version = @project.version@
- jetty.home = /opt/jetty-distribution
- jetty.base = /home/jetty/mybase
+ jetty.version = {VERSION}
+ jetty.tag.version = master
+ jetty.home = /Users/staff/installs/repository/jetty-distribution-9.4.0
+ jetty.base = /Users/staff/installs/repository/jetty-distribution-9.4.0/mybase
 
 Config Search Order:
 --------------------
  <command-line>
- ${jetty.base} -> /home/jetty/mybase
- ${jetty.home} -> /opt/jetty-distribution
+ ${jetty.base} -> /Users/staff/installs/repository/jetty-distribution-9.4.0/mybase
+ ${jetty.home} -> /Users/staff/installs/repository/jetty-distribution-9.4.0
 
 
 JVM Arguments:
@@ -55,7 +56,11 @@ System Properties:
 
 Properties:
 -----------
- jetty.http.port = 8080
+ java.version = 1.8.0_92
+ java.version.major = 1
+ java.version.minor = 8
+ java.version.micro = 0
+ java.version.update = 92
 
 Jetty Server Classpath:
 -----------------------
@@ -64,19 +69,19 @@ Note: order presented here is how they would appear on the classpath.
       changes to the --module=name command line options will be reflected here.
  0:                    3.1.0 | ${jetty.home}/lib/servlet-api-3.1.jar
  1:                 3.1.0.M0 | ${jetty.home}/lib/jetty-schemas-3.1.jar
- 2:           @project.version@ | ${jetty.home}/lib/jetty-http-@project.version@.jar
- 3:           @project.version@ | ${jetty.home}/lib/jetty-server-@project.version@.jar
- 4:           @project.version@ | ${jetty.home}/lib/jetty-xml-@project.version@.jar
- 5:           @project.version@ | ${jetty.home}/lib/jetty-util-@project.version@.jar
- 6:           @project.version@ | ${jetty.home}/lib/jetty-io-@project.version@.jar
- 7:           @project.version@ | ${jetty.home}/lib/jetty-security-@project.version@.jar
- 8:           @project.version@ | ${jetty.home}/lib/jetty-servlet-@project.version@.jar
- 9:           @project.version@ | ${jetty.home}/lib/jetty-webapp-@project.version@.jar
-10:           @project.version@ | ${jetty.home}/lib/jetty-deploy-@project.version@.jar
+ 2:           {VERSION} | ${jetty.home}/lib/jetty-http-{VERSION}.jar
+ 3:           {VERSION} | ${jetty.home}/lib/jetty-server-{VERSION}.jar
+ 4:           {VERSION} | ${jetty.home}/lib/jetty-xml-{VERSION}.jar
+ 5:           {VERSION} | ${jetty.home}/lib/jetty-util-{VERSION}.jar
+ 6:           {VERSION} | ${jetty.home}/lib/jetty-io-{VERSION}.jar
+ 7:           {VERSION} | ${jetty.home}/lib/jetty-security-{VERSION}.jar
+ 8:           {VERSION} | ${jetty.home}/lib/jetty-servlet-{VERSION}.jar
+ 9:           {VERSION} | ${jetty.home}/lib/jetty-webapp-{VERSION}.jar
+10:           {VERSION} | ${jetty.home}/lib/jetty-deploy-{VERSION}.jar
 
 Jetty Active XMLs:
 ------------------
  ${jetty.home}/etc/jetty.xml
- ${jetty.home}/etc/jetty-http.xml
  ${jetty.home}/etc/jetty-deploy.xml
+ ${jetty.home}/etc/jetty-http.xml
 ....

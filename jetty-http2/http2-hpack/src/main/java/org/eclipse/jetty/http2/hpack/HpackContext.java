@@ -28,16 +28,14 @@ import org.eclipse.jetty.http.HttpField;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpScheme;
-import org.eclipse.jetty.util.ArrayQueue;
 import org.eclipse.jetty.util.ArrayTernaryTrie;
 import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.Trie;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
-
-/* ------------------------------------------------------------ */
-/** HPACK - Header Compression for HTTP/2
+/**
+ * HPACK - Header Compression for HTTP/2
  * <p>This class maintains the compression context for a single HTTP/2
  * connection. Specifically it holds the static and dynamic Header Field Tables
  * and the associated sizes and limits.
@@ -47,11 +45,11 @@ import org.eclipse.jetty.util.log.Logger;
 public class HpackContext
 {
     public static final Logger LOG = Log.getLogger(HpackContext.class);
-    
-    public static final String[][] STATIC_TABLE = 
+    private static final String EMPTY = "";
+    public static final String[][] STATIC_TABLE =
     {
         {null,null},
-        /* 1  */ {":authority",null},
+        /* 1  */ {":authority",EMPTY},
         /* 2  */ {":method","GET"},
         /* 3  */ {":method","POST"},
         /* 4  */ {":path","/"},
@@ -65,59 +63,60 @@ public class HpackContext
         /* 12 */ {":status","400"},
         /* 13 */ {":status","404"},
         /* 14 */ {":status","500"},
-        /* 15 */ {"accept-charset",null},
+        /* 15 */ {"accept-charset",EMPTY},
         /* 16 */ {"accept-encoding","gzip, deflate"},
-        /* 17 */ {"accept-language",null},
-        /* 18 */ {"accept-ranges",null},
-        /* 19 */ {"accept",null},
-        /* 20 */ {"access-control-allow-origin",null},
-        /* 21 */ {"age",null},
-        /* 22 */ {"allow",null},
-        /* 23 */ {"authorization",null},
-        /* 24 */ {"cache-control",null},
-        /* 25 */ {"content-disposition",null},
-        /* 26 */ {"content-encoding",null},
-        /* 27 */ {"content-language",null},
-        /* 28 */ {"content-length",null},
-        /* 29 */ {"content-location",null},
-        /* 30 */ {"content-range",null},
-        /* 31 */ {"content-type",null},
-        /* 32 */ {"cookie",null},
-        /* 33 */ {"date",null},
-        /* 34 */ {"etag",null},
-        /* 35 */ {"expect",null},
-        /* 36 */ {"expires",null},
-        /* 37 */ {"from",null},
-        /* 38 */ {"host",null},
-        /* 39 */ {"if-match",null},
-        /* 40 */ {"if-modified-since",null},
-        /* 41 */ {"if-none-match",null},
-        /* 42 */ {"if-range",null},
-        /* 43 */ {"if-unmodified-since",null},
-        /* 44 */ {"last-modified",null},
-        /* 45 */ {"link",null},
-        /* 46 */ {"location",null},
-        /* 47 */ {"max-forwards",null},
-        /* 48 */ {"proxy-authenticate",null},
-        /* 49 */ {"proxy-authorization",null},
-        /* 50 */ {"range",null},
-        /* 51 */ {"referer",null},
-        /* 52 */ {"refresh",null},
-        /* 53 */ {"retry-after",null},
-        /* 54 */ {"server",null},
-        /* 55 */ {"set-cookie",null},
-        /* 56 */ {"strict-transport-security",null},
-        /* 57 */ {"transfer-encoding",null},
-        /* 58 */ {"user-agent",null},
-        /* 59 */ {"vary",null},
-        /* 60 */ {"via",null},
-        /* 61 */ {"www-authenticate",null},
+        /* 17 */ {"accept-language",EMPTY},
+        /* 18 */ {"accept-ranges",EMPTY},
+        /* 19 */ {"accept",EMPTY},
+        /* 20 */ {"access-control-allow-origin",EMPTY},
+        /* 21 */ {"age",EMPTY},
+        /* 22 */ {"allow",EMPTY},
+        /* 23 */ {"authorization",EMPTY},
+        /* 24 */ {"cache-control",EMPTY},
+        /* 25 */ {"content-disposition",EMPTY},
+        /* 26 */ {"content-encoding",EMPTY},
+        /* 27 */ {"content-language",EMPTY},
+        /* 28 */ {"content-length",EMPTY},
+        /* 29 */ {"content-location",EMPTY},
+        /* 30 */ {"content-range",EMPTY},
+        /* 31 */ {"content-type",EMPTY},
+        /* 32 */ {"cookie",EMPTY},
+        /* 33 */ {"date",EMPTY},
+        /* 34 */ {"etag",EMPTY},
+        /* 35 */ {"expect",EMPTY},
+        /* 36 */ {"expires",EMPTY},
+        /* 37 */ {"from",EMPTY},
+        /* 38 */ {"host",EMPTY},
+        /* 39 */ {"if-match",EMPTY},
+        /* 40 */ {"if-modified-since",EMPTY},
+        /* 41 */ {"if-none-match",EMPTY},
+        /* 42 */ {"if-range",EMPTY},
+        /* 43 */ {"if-unmodified-since",EMPTY},
+        /* 44 */ {"last-modified",EMPTY},
+        /* 45 */ {"link",EMPTY},
+        /* 46 */ {"location",EMPTY},
+        /* 47 */ {"max-forwards",EMPTY},
+        /* 48 */ {"proxy-authenticate",EMPTY},
+        /* 49 */ {"proxy-authorization",EMPTY},
+        /* 50 */ {"range",EMPTY},
+        /* 51 */ {"referer",EMPTY},
+        /* 52 */ {"refresh",EMPTY},
+        /* 53 */ {"retry-after",EMPTY},
+        /* 54 */ {"server",EMPTY},
+        /* 55 */ {"set-cookie",EMPTY},
+        /* 56 */ {"strict-transport-security",EMPTY},
+        /* 57 */ {"transfer-encoding",EMPTY},
+        /* 58 */ {"user-agent",EMPTY},
+        /* 59 */ {"vary",EMPTY},
+        /* 60 */ {"via",EMPTY},
+        /* 61 */ {"www-authenticate",EMPTY},
     };
-    
+
     private static final Map<HttpField,Entry> __staticFieldMap = new HashMap<>();
     private static final Trie<StaticEntry> __staticNameMap = new ArrayTernaryTrie<>(true,512);
     private static final StaticEntry[] __staticTableByHeader = new StaticEntry[HttpHeader.UNKNOWN.ordinal()];
     private static final StaticEntry[] __staticTable=new StaticEntry[STATIC_TABLE.length];
+    private static final int STATIC_SIZE = STATIC_TABLE.length-1;
     static
     {
         Set<String> added = new HashSet<>();
@@ -134,42 +133,42 @@ public class HpackContext
                 {
                     case C_METHOD:
                     {
-                        
+
                         HttpMethod method = HttpMethod.CACHE.get(value);
                         if (method!=null)
                             entry=new StaticEntry(i,new StaticTableHttpField(header,name,value,method));
                         break;
                     }
-                    
+
                     case C_SCHEME:
                     {
-                        
+
                         HttpScheme scheme = HttpScheme.CACHE.get(value);
                         if (scheme!=null)
                             entry=new StaticEntry(i,new StaticTableHttpField(header,name,value,scheme));
                         break;
                     }
-                    
+
                     case C_STATUS:
                     {
                         entry=new StaticEntry(i,new StaticTableHttpField(header,name,value,Integer.valueOf(value)));
                         break;
                     }
-                    
+
                     default:
                         break;
                 }
             }
-            
+
             if (entry==null)
                 entry=new StaticEntry(i,header==null?new HttpField(STATIC_TABLE[i][0],value):new HttpField(header,name,value));
-            
-                        
+
+
             __staticTable[i]=entry;
-            
+
             if (entry._field.getValue()!=null)
                 __staticFieldMap.put(entry._field,entry);
-            
+
             if (!added.contains(entry._field.getName()))
             {
                 added.add(entry._field.getName());
@@ -178,7 +177,7 @@ public class HpackContext
                     throw new IllegalStateException("name trie too small");
             }
         }
-        
+
         for (HttpHeader h : HttpHeader.values())
         {
             StaticEntry entry = __staticNameMap.get(h.asString());
@@ -186,32 +185,30 @@ public class HpackContext
                 __staticTableByHeader[h.ordinal()]=entry;
         }
     }
-    
+
     private int _maxDynamicTableSizeInBytes;
     private int _dynamicTableSizeInBytes;
     private final DynamicTable _dynamicTable;
     private final Map<HttpField,Entry> _fieldMap = new HashMap<>();
     private final Map<String,Entry> _nameMap = new HashMap<>();
-    
+
     HpackContext(int maxDynamicTableSize)
     {
         _maxDynamicTableSizeInBytes=maxDynamicTableSize;
         int guesstimateEntries = 10+maxDynamicTableSize/(32+10+10);
-        _dynamicTable=new DynamicTable(guesstimateEntries,guesstimateEntries+10);
+        _dynamicTable=new DynamicTable(guesstimateEntries);
         if (LOG.isDebugEnabled())
             LOG.debug(String.format("HdrTbl[%x] created max=%d",hashCode(),maxDynamicTableSize));
     }
-    
+
     public void resize(int newMaxDynamicTableSize)
     {
         if (LOG.isDebugEnabled())
             LOG.debug(String.format("HdrTbl[%x] resized max=%d->%d",hashCode(),_maxDynamicTableSizeInBytes,newMaxDynamicTableSize));
         _maxDynamicTableSizeInBytes=newMaxDynamicTableSize;
-        int guesstimateEntries = 10+newMaxDynamicTableSize/(32+10+10);
-        evict();
-        _dynamicTable.resizeUnsafe(guesstimateEntries);
+        _dynamicTable.evict();
     }
-    
+
     public Entry get(HttpField field)
     {
         Entry entry = _fieldMap.get(field);
@@ -219,7 +216,7 @@ public class HpackContext
             entry=__staticFieldMap.get(field);
         return entry;
     }
-    
+
     public Entry get(String name)
     {
         Entry entry = __staticNameMap.get(name);
@@ -227,19 +224,15 @@ public class HpackContext
             return entry;
         return _nameMap.get(StringUtil.asciiToLowerCase(name));
     }
-    
+
     public Entry get(int index)
     {
-        if (index<__staticTable.length)
+        if (index<=STATIC_SIZE)
             return __staticTable[index];
-            
-        int d=_dynamicTable.size()-index+__staticTable.length-1;
 
-        if (d>=0) 
-            return _dynamicTable.getUnsafe(d);      
-        return null;
+        return _dynamicTable.get(index);
     }
-    
+
     public Entry get(HttpHeader header)
     {
         Entry e = __staticTableByHeader[header.ordinal()];
@@ -252,11 +245,10 @@ public class HpackContext
     {
         return __staticTableByHeader[header.ordinal()];
     }
-    
+
     public Entry add(HttpField field)
     {
-        int slot=_dynamicTable.getNextSlotUnsafe();
-        Entry entry=new Entry(slot,field);
+        Entry entry=new Entry(field);
         int size = entry.getSize();
         if (size>_maxDynamicTableSizeInBytes)
         {
@@ -265,13 +257,13 @@ public class HpackContext
             return null;
         }
         _dynamicTableSizeInBytes+=size;
-        _dynamicTable.addUnsafe(entry);
+        _dynamicTable.add(entry);
         _fieldMap.put(field,entry);
         _nameMap.put(StringUtil.asciiToLowerCase(field.getName()),entry);
 
         if (LOG.isDebugEnabled())
             LOG.debug(String.format("HdrTbl[%x] added %s",hashCode(),entry));
-        evict();
+        _dynamicTable.evict();
         return entry;
     }
 
@@ -282,7 +274,7 @@ public class HpackContext
     {
         return _dynamicTable.size();
     }
-    
+
     /**
      * @return Current Dynamic table size in Octets
      */
@@ -306,9 +298,9 @@ public class HpackContext
         if (entry.isStatic())
             return entry._slot;
 
-        return _dynamicTable.index(entry)+__staticTable.length-1;
+        return _dynamicTable.index(entry);
     }
-    
+
     public static int staticIndex(HttpHeader header)
     {
         if (header==null)
@@ -316,180 +308,161 @@ public class HpackContext
         Entry entry=__staticNameMap.get(header.asString());
         if (entry==null)
             return 0;
-        return entry.getSlot();
+        return entry._slot;
     }
-    
-    private void evict()
-    {
-        while (_dynamicTableSizeInBytes>_maxDynamicTableSizeInBytes)
-        {
-            Entry entry = _dynamicTable.pollUnsafe();
-            if (LOG.isDebugEnabled())
-                LOG.debug(String.format("HdrTbl[%x] evict %s",hashCode(),entry));
-            _dynamicTableSizeInBytes-=entry.getSize();
-            entry._slot=-1;
-            _fieldMap.remove(entry.getHttpField());
-            String lc=StringUtil.asciiToLowerCase(entry.getHttpField().getName());
-            if (entry==_nameMap.get(lc))
-                _nameMap.remove(lc);
-        }
-        if (LOG.isDebugEnabled())
-            LOG.debug(String.format("HdrTbl[%x] entries=%d, size=%d, max=%d",hashCode(),_dynamicTable.size(),_dynamicTableSizeInBytes,_maxDynamicTableSizeInBytes));
-    }
-    
+
+
     @Override
     public String toString()
     {
         return String.format("HpackContext@%x{entries=%d,size=%d,max=%d}",hashCode(),_dynamicTable.size(),_dynamicTableSizeInBytes,_maxDynamicTableSizeInBytes);
     }
-    
-    
-    
-    /* ------------------------------------------------------------ */
-    /**
-     */
-    private class DynamicTable extends ArrayQueue<HpackContext.Entry>
+
+    private class DynamicTable 
     {
-        /* ------------------------------------------------------------ */
-        /**
-         * @param initCapacity
-         * @param growBy
-         */
-        private DynamicTable(int initCapacity, int growBy)
+        Entry[] _entries;
+        int _size;
+        int _offset;
+        int _growby;
+        
+        private DynamicTable(int initCapacity)
         {
-            super(initCapacity,growBy);
+            _entries=new Entry[initCapacity];
+            _growby=initCapacity;
         }
 
-        /* ------------------------------------------------------------ */
-        /**
-         * @see org.eclipse.jetty.util.ArrayQueue#growUnsafe()
-         */
-        @Override
-        protected void resizeUnsafe(int newCapacity)
+        public void add(Entry entry)
         {
-            // Relay on super.growUnsafe to pack all entries 0 to _nextSlot
-            super.resizeUnsafe(newCapacity);
-            for (int s=0;s<_nextSlot;s++)
-                ((Entry)_elements[s])._slot=s;
+            if (_size==_entries.length)
+            {
+                Entry[] entries = new Entry[_entries.length+_growby];
+                for (int i=0;i<_size;i++)
+                {
+                    int slot = (_offset+i)%_entries.length;
+                    entries[i]=_entries[slot];
+                    entries[i]._slot=i;
+                }
+                _entries=entries;
+                _offset=0;
+            }
+            int slot=(_size++ + _offset)%_entries.length;
+            _entries[slot]=entry;
+            entry._slot=slot;
         }
 
-        /* ------------------------------------------------------------ */
-        /**
-         * @see org.eclipse.jetty.util.ArrayQueue#enqueue(java.lang.Object)
-         */
-        @Override
-        public boolean enqueue(Entry e)
+        public int index(Entry entry)
         {
-            return super.enqueue(e);
-        }
-
-        /* ------------------------------------------------------------ */
-        /**
-         * @see org.eclipse.jetty.util.ArrayQueue#dequeue()
-         */
-        @Override
-        public Entry dequeue()
-        {
-            return super.dequeue();
+            return STATIC_SIZE + _size-(entry._slot-_offset+_entries.length)%_entries.length;
         }
         
-        /* ------------------------------------------------------------ */
-        /**
-         * @param entry
-         * @return
-         */
-        private int index(Entry entry)
+        public Entry get(int index)
         {
-            return entry._slot>=_nextE?_size-entry._slot+_nextE:_nextSlot-entry._slot;
+            int d = index-STATIC_SIZE-1;
+            if (d<0 || d>=_size)
+                return null;
+            int slot = (_offset+_size-d-1)%_entries.length;
+            return _entries[slot];
+        }
+
+        public int size()
+        {
+            return _size;
+        }
+
+        private void evict()
+        {
+            while (_dynamicTableSizeInBytes>_maxDynamicTableSizeInBytes)
+            {
+                Entry entry = _entries[_offset];
+                _entries[_offset]=null;
+                _offset = (_offset+1)%_entries.length;
+                _size--;
+                if (LOG.isDebugEnabled())
+                    LOG.debug(String.format("HdrTbl[%x] evict %s",hashCode(),entry));
+                _dynamicTableSizeInBytes-=entry.getSize();
+                entry._slot=-1;
+                _fieldMap.remove(entry.getHttpField());
+                String lc=StringUtil.asciiToLowerCase(entry.getHttpField().getName());
+                if (entry==_nameMap.get(lc))
+                    _nameMap.remove(lc);
+
+            }
+            if (LOG.isDebugEnabled())
+                LOG.debug(String.format("HdrTbl[%x] entries=%d, size=%d, max=%d",hashCode(),_dynamicTable.size(),_dynamicTableSizeInBytes,_maxDynamicTableSizeInBytes));
         }
 
     }
 
-
-
-    /* ------------------------------------------------------------ */
-    /* ------------------------------------------------------------ */
-    /* ------------------------------------------------------------ */
     public static class Entry
     {
         final HttpField _field;
-        int _slot;
-        
+        int _slot; // The index within it's array
+
         Entry()
-        {    
-            _slot=0;
+        {
+            _slot=-1;
             _field=null;
         }
-        
-        Entry(int index,String name, String value)
-        {    
-            _slot=index;
-            _field=new HttpField(name,value);
-        }
-        
-        Entry(int slot, HttpField field)
-        {    
-            _slot=slot;
+
+        Entry(HttpField field)
+        {
             _field=field;
         }
 
         public int getSize()
         {
-            return 32+_field.getName().length()+_field.getValue().length();
+            String value = _field.getValue();
+            return 32 + _field.getName().length() + (value == null ? 0 : value.length());
         }
-        
+
         public HttpField getHttpField()
         {
             return _field;
         }
-        
+
         public boolean isStatic()
         {
             return false;
         }
-        
+
         public byte[] getStaticHuffmanValue()
         {
             return null;
         }
-        
-        public int getSlot()
-        {
-            return _slot;
-        }
-        
+
         public String toString()
         {
             return String.format("{%s,%d,%s,%x}",isStatic()?"S":"D",_slot,_field,hashCode());
         }
-    } 
-    
+    }
+
     public static class StaticEntry extends Entry
     {
         private final byte[] _huffmanValue;
         private final byte _encodedField;
-        
+
         StaticEntry(int index,HttpField field)
-        {    
-            super(index,field);
+        {
+            super(field);
+            _slot=index;
             String value = field.getValue();
             if (value!=null && value.length()>0)
             {
                 int huffmanLen = Huffman.octetsNeeded(value);
                 int lenLen = NBitInteger.octectsNeeded(7,huffmanLen);
                 _huffmanValue = new byte[1+lenLen+huffmanLen];
-                ByteBuffer buffer = ByteBuffer.wrap(_huffmanValue); 
-                        
+                ByteBuffer buffer = ByteBuffer.wrap(_huffmanValue);
+
                 // Indicate Huffman
                 buffer.put((byte)0x80);
                 // Add huffman length
                 NBitInteger.encode(buffer,7,huffmanLen);
                 // Encode value
-                Huffman.encode(buffer,value);       
+                Huffman.encode(buffer,value);
             }
             else
                 _huffmanValue=null;
-            
+
             _encodedField=(byte)(0x80|index);
         }
 
@@ -498,18 +471,16 @@ public class HpackContext
         {
             return true;
         }
-        
+
         @Override
         public byte[] getStaticHuffmanValue()
         {
             return _huffmanValue;
         }
-        
+
         public byte getEncodedField()
         {
             return _encodedField;
         }
     }
-
-
 }

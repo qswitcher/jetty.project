@@ -19,24 +19,6 @@
 
 package org.eclipse.jetty.gcloud.session;
 
-import com.google.gcloud.datastore.Blob;
-import com.google.gcloud.datastore.BlobValue;
-import com.google.gcloud.datastore.Datastore;
-import com.google.gcloud.datastore.DatastoreException;
-import com.google.gcloud.datastore.DatastoreFactory;
-import com.google.gcloud.datastore.Entity;
-import com.google.gcloud.datastore.Key;
-import com.google.gcloud.datastore.KeyFactory;
-import com.google.gcloud.datastore.ProjectionEntity;
-import com.google.gcloud.datastore.Query;
-import com.google.gcloud.datastore.QueryResults;
-import com.google.gcloud.datastore.StructuredQuery;
-import com.google.gcloud.datastore.StructuredQuery.CompositeFilter;
-import com.google.gcloud.datastore.StructuredQuery.KeyQueryBuilder;
-import com.google.gcloud.datastore.StructuredQuery.Projection;
-import com.google.gcloud.datastore.StructuredQuery.ProjectionEntityQueryBuilder;
-import com.google.gcloud.datastore.StructuredQuery.PropertyFilter;
-
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectOutputStream;
 import java.util.HashSet;
@@ -54,6 +36,20 @@ import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.log.Log;
 import org.eclipse.jetty.util.log.Logger;
 
+import com.google.cloud.datastore.Blob;
+import com.google.cloud.datastore.BlobValue;
+import com.google.cloud.datastore.Datastore;
+import com.google.cloud.datastore.DatastoreException;
+import com.google.cloud.datastore.DatastoreOptions;
+import com.google.cloud.datastore.Entity;
+import com.google.cloud.datastore.Key;
+import com.google.cloud.datastore.KeyFactory;
+import com.google.cloud.datastore.ProjectionEntity;
+import com.google.cloud.datastore.Query;
+import com.google.cloud.datastore.QueryResults;
+import com.google.cloud.datastore.StructuredQuery.CompositeFilter;
+import com.google.cloud.datastore.StructuredQuery.PropertyFilter;
+
 /**
  * GCloudSessionDataStore
  *
@@ -63,30 +59,326 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
 {
     private  final static Logger LOG = Log.getLogger("org.eclipse.jetty.server.session");
 
-    public  static final String ID = "id";
-    public  static final String CONTEXTPATH = "contextPath";
-    public  static final String VHOST = "vhost";
-    public  static final String ACCESSED = "accessed";
-    public  static final String LASTACCESSED = "lastAccessed";
-    public  static final String CREATETIME = "createTime";
-    public  static final  String COOKIESETTIME = "cookieSetTime";
-    public  static final String LASTNODE = "lastNode";
-    public  static final String EXPIRY = "expiry";
-    public  static final  String MAXINACTIVE = "maxInactive";
-    public  static final  String ATTRIBUTES = "attributes";
 
-    public static final String KIND = "GCloudSession";
     public static final int DEFAULT_MAX_QUERY_RESULTS = 100;
     public static final int DEFAULT_MAX_RETRIES = 5;
     public static final int DEFAULT_BACKOFF_MS = 1000;
 
-    private GCloudConfiguration _config;
-    private Datastore _datastore;
-    private KeyFactory _keyFactory;
-    private int _maxResults = DEFAULT_MAX_QUERY_RESULTS;
-    private int _maxRetries = DEFAULT_MAX_RETRIES;
-    private int _backoff = DEFAULT_BACKOFF_MS;
+    protected Datastore _datastore;
+    protected KeyFactory _keyFactory;
+    protected int _maxResults = DEFAULT_MAX_QUERY_RESULTS;
+    protected int _maxRetries = DEFAULT_MAX_RETRIES;
+    protected int _backoff = DEFAULT_BACKOFF_MS;
+
+    protected boolean _dsProvided = false;
+    protected boolean _indexesPresent = false;
+    protected EntityDataModel _model;
+    protected boolean _modelProvided;
+
+
+    private String _namespace;
     
+    
+    
+    /**
+     * EntityDataModel
+     *
+     * Names of type of Entity and Entity properties for sessions.
+     */
+    public static class EntityDataModel
+    {
+        public  static final String ID = "id";
+        public  static final String CONTEXTPATH = "contextPath";
+        public  static final String VHOST = "vhost";
+        public  static final String ACCESSED = "accessed";
+        public  static final String LASTACCESSED = "lastAccessed";
+        public  static final String CREATETIME = "createTime";
+        public  static final  String COOKIESETTIME = "cookieSetTime";
+        public  static final String LASTNODE = "lastNode";
+        public  static final String EXPIRY = "expiry";
+        public  static final  String MAXINACTIVE = "maxInactive";
+        public  static final  String ATTRIBUTES = "attributes";
+
+        public static final String KIND = "GCloudSession";
+        protected String _kind = KIND;
+        protected String _id = ID;
+        protected String _contextPath = CONTEXTPATH;
+        protected String _vhost = VHOST;
+        protected String _accessed = ACCESSED;
+        protected String _lastAccessed = LASTACCESSED;
+        protected String _lastNode = LASTNODE;
+        protected String _createTime = CREATETIME;
+        protected String _cookieSetTime = COOKIESETTIME;
+        protected String _expiry = EXPIRY;
+        protected String _maxInactive = MAXINACTIVE;
+        protected String _attributes = ATTRIBUTES;
+        
+        
+        private void checkNotNull(String s)
+        {
+            if (s == null)
+                throw new IllegalArgumentException(s);
+        }
+        
+        /**
+         * @return the lastNode
+         */
+        public String getLastNode()
+        {
+            return _lastNode;
+        }
+
+        /**
+         * @param lastNode the lastNode to set
+         */
+        public void setLastNode(String lastNode)
+        {
+            _lastNode = lastNode;
+        }
+
+        /**
+         * @return the kind
+         */
+        public String getKind()
+        {
+            return _kind;
+        }
+        /**
+         * @param kind the kind to set
+         */
+        public void setKind(String kind)
+        {
+            checkNotNull(kind);
+            _kind = kind;
+        }
+        /**
+         * @return the id
+         */
+        public String getId()
+        {
+            return _id;
+        }
+        /**
+         * @param id the id to set
+         */
+        public void setId(String id)
+        {
+            checkNotNull(id);
+            _id = id;
+        }
+        /**
+         * @return the contextPath
+         */
+        public String getContextPath()
+        {
+            return _contextPath;
+        }
+        /**
+         * @param contextPath the contextPath to set
+         */
+        public void setContextPath(String contextPath)
+        {
+            checkNotNull(contextPath);
+            _contextPath = contextPath;
+        }
+        /**
+         * @return the vhost
+         */
+        public String getVhost()
+        {
+            return _vhost;
+        }
+        /**
+         * @param vhost the vhost to set
+         */
+        public void setVhost(String vhost)
+        {
+            checkNotNull(vhost);
+            _vhost = vhost;
+        }
+        /**
+         * @return the accessed
+         */
+        public String getAccessed()
+        {
+            return _accessed;
+        }
+        /**
+         * @param accessed the accessed to set
+         */
+        public void setAccessed(String accessed)
+        {
+            checkNotNull(accessed);
+            _accessed = accessed;
+        }
+        /**
+         * @return the lastAccessed
+         */
+        public String getLastAccessed()
+        {
+            return _lastAccessed;
+        }
+        /**
+         * @param lastAccessed the lastAccessed to set
+         */
+        public void setLastAccessed(String lastAccessed)
+        {
+            checkNotNull(lastAccessed);
+            _lastAccessed = lastAccessed;
+        }
+        /**
+         * @return the createTime
+         */
+        public String getCreateTime()
+        {
+            return _createTime;
+        }
+        /**
+         * @param createTime the createTime to set
+         */
+        public void setCreateTime(String createTime)
+        {
+            checkNotNull(createTime);
+            _createTime = createTime;
+        }
+        /**
+         * @return the cookieSetTime
+         */
+        public String getCookieSetTime()
+        {
+            return _cookieSetTime;
+        }
+        /**
+         * @param cookieSetTime the cookieSetTime to set
+         */
+        public void setCookieSetTime(String cookieSetTime)
+        {
+            checkNotNull(cookieSetTime);
+            _cookieSetTime = cookieSetTime;
+        }
+        /**
+         * @return the expiry
+         */
+        public String getExpiry()
+        {
+            return _expiry;
+        }
+        /**
+         * @param expiry the expiry to set
+         */
+        public void setExpiry(String expiry)
+        {
+            checkNotNull(expiry);
+            _expiry = expiry;
+        }
+        /**
+         * @return the maxInactive
+         */
+        public String getMaxInactive()
+        {
+            return _maxInactive;
+        }
+        /**
+         * @param maxInactive the maxInactive to set
+         */
+        public void setMaxInactive(String maxInactive)
+        {
+            checkNotNull(maxInactive);
+            _maxInactive = maxInactive;
+        }
+        /**
+         * @return the attributes
+         */
+        public String getAttributes()
+        {
+            return _attributes;
+        }
+        /**
+         * @param attributes the attributes to set
+         */
+        public void setAttributes(String attributes)
+        {
+            checkNotNull(attributes);
+            _attributes = attributes;
+        }
+
+        /** 
+         * @see java.lang.Object#toString()
+         */
+        @Override
+        public String toString()
+        {
+            return String.format("%s==%s:%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s",this.getClass().getName(),
+                                 _kind,_accessed,_attributes,_contextPath,_cookieSetTime,_createTime,_expiry,_id,_lastAccessed,_lastNode,_maxInactive,_vhost);
+        }
+        
+        
+        
+    }
+    
+    
+    /**
+     * ExpiryInfo
+     *
+     * Information related to session expiry
+     */
+    public static class ExpiryInfo
+    {
+        String _id;
+        String _lastNode;
+        long _expiry;
+        
+        /**
+         * @param id session id
+         * @param lastNode  last node id to manage the session
+         * @param expiry  timestamp of expiry
+         */
+        public ExpiryInfo (String id, String lastNode, long expiry)
+        {
+            _id = id;
+            _lastNode = lastNode;
+            _expiry = expiry;
+        }
+
+        /**
+         * @return the id
+         */
+        public String getId()
+        {
+            return _id;
+        }
+
+        /**
+         * @return the lastNode
+         */
+        public String getLastNode()
+        {
+            return _lastNode;
+        }
+
+        /**
+         * @return the expiry time
+         */
+        public long getExpiry()
+        {
+            return _expiry;
+        }
+        
+        
+    }
+    
+    public void setEntityDataModel(EntityDataModel model)
+    {
+        updateBean(_model, model);
+        _model = model;
+        _modelProvided = true;
+    }
+    
+    
+    public EntityDataModel getEntityDataModel ()
+    {
+        return _model;
+    }
     
     
     public void setBackoffMs (int ms)
@@ -94,6 +386,15 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
         _backoff = ms;
     }
     
+    public void setNamespace (String namespace)
+    {
+        _namespace = namespace;
+    }
+    
+    public String getNamespace ()
+    {
+        return _namespace;
+    }
     
     public int getBackoffMs ()
     {
@@ -118,12 +419,25 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
     @Override
     protected void doStart() throws Exception
     {
+        if (!_dsProvided)
+        {
+            if (!StringUtil.isBlank(getNamespace()))
+                _datastore = DatastoreOptions.builder().namespace(getNamespace()).build().service();
+            else
+                _datastore = DatastoreOptions.defaultInstance().service();
+        }
+
+        if (_model == null)
+        {
+            _model = new EntityDataModel();
+            addBean(_model,true);
+        }
+
+        _keyFactory = _datastore.newKeyFactory().kind(_model.getKind());   
         
-        if (_config == null)
-            throw new IllegalStateException("No DataStore configuration");
-        
-        _datastore = DatastoreFactory.instance().get(_config.getDatastoreOptions());
-        _keyFactory = _datastore.newKeyFactory().kind(KIND);
+        _indexesPresent = checkIndexes();
+        if (!_indexesPresent)
+            LOG.warn("Session indexes not uploaded, falling back to less efficient queries");
         
         super.doStart();
     }
@@ -135,19 +449,17 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
     protected void doStop() throws Exception
     {
         super.doStop();
+        if (!_dsProvided)
+            _datastore = null;
+        if (!_modelProvided)
+            _model = null;
     }
     
-    
-    public void setGCloudConfiguration (GCloudConfiguration cfg)
+    public void setDatastore (Datastore datastore)
     {
-        _config = cfg;
+        _datastore = datastore;
+        _dsProvided = true;
     }
-    
-    public GCloudConfiguration getGCloudConfiguration ()
-    {
-        return _config;
-    }
-
     
     public int getMaxResults()
     {
@@ -208,48 +520,40 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
 
         try
         {        
-            //get up to maxResult number of sessions that have expired
-            ProjectionEntityQueryBuilder pbuilder = Query.projectionEntityQueryBuilder();
-            pbuilder.projection(Projection.property(ID), Projection.property(LASTNODE), Projection.property(EXPIRY));
-            pbuilder.filter(CompositeFilter.and(PropertyFilter.gt(EXPIRY, 0), PropertyFilter.le(EXPIRY, now)));
-            pbuilder.limit(_maxResults);
-            pbuilder.kind(KIND);
-            StructuredQuery<ProjectionEntity> pquery = pbuilder.build();
-            QueryResults<ProjectionEntity> presults = _datastore.run(pquery);
-
-            while (presults.hasNext())
+            Set<ExpiryInfo> info = null;
+            if (_indexesPresent)
+                info = queryExpiryByIndex();
+            else
+                info = queryExpiryByEntity();
+   
+            for (ExpiryInfo item:info)
             {
-                ProjectionEntity pe = presults.next();
-                String id = pe.getString(ID);
-                String lastNode = pe.getString(LASTNODE);
-                long expiry = pe.getLong(EXPIRY);
-
-                if (StringUtil.isBlank(lastNode))
-                    expired.add(id); //nobody managing it
+                if (StringUtil.isBlank(item.getLastNode()))
+                    expired.add(item.getId()); //nobody managing it
                 else
                 {
-                    if (_context.getWorkerName().equals(lastNode))
-                        expired.add(id); //we're managing it, we can expire it
+                    if (_context.getWorkerName().equals(item.getLastNode()))
+                        expired.add(item.getId()); //we're managing it, we can expire it
                     else
                     {
                         if (_lastExpiryCheckTime <= 0)
                         {
                             //our first check, just look for sessions that we managed by another node that
                             //expired at least 3 graceperiods ago
-                            if (expiry < (now - (1000L * (3 * _gracePeriodSec))))
-                                expired.add(id);
+                            if (item.getExpiry() < (now - (1000L * (3 * _gracePeriodSec))))
+                                expired.add(item.getId());
                         }
                         else
                         {
                             //another node was last managing it, only expire it if it expired a graceperiod ago
-                            if (expiry < (now - (1000L * _gracePeriodSec)))
-                                expired.add(id);
+                            if (item.getExpiry() < (now - (1000L * _gracePeriodSec)))
+                                expired.add(item.getId());
                         }
                     }
                 }
             }
 
-            //reconcile against ids that the SessionDataStore thinks are expired
+            //reconcile against ids that the SessionCache thinks are expired
             Set<String> tmp = new HashSet<String>(candidates);
             tmp.removeAll(expired);       
             if (!tmp.isEmpty())
@@ -262,12 +566,12 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
                 {
                     try
                     {
-                        KeyQueryBuilder kbuilder = Query.keyQueryBuilder();
-                        kbuilder.filter(PropertyFilter.eq(ID, s));
-                        kbuilder.kind(KIND);
-                        StructuredQuery<Key> kq = kbuilder.build();
-                        QueryResults<Key> kresults = _datastore.run(kq);
-                        if (!kresults.hasNext())
+                        Query<Key> q = Query.keyQueryBuilder()
+                                .kind(_model.getKind())
+                                .filter(PropertyFilter.eq(_model.getId(), s))
+                                .build();
+                       QueryResults<Key> res = _datastore.run(q);
+                        if (!res.hasNext())
                             expired.add(s); //not in db, can be expired
                     }
                     catch (Exception e)
@@ -287,35 +591,152 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
 
     }
 
- 
+
+    /**
+     * A less efficient query to find sessions whose expiry time has passed:
+     * retrieves the whole Entity.
+     * @return set of ExpiryInfo representing the id, lastNode and expiry time of 
+     * sessions that are expired
+     * @throws Exception if datastore experiences a problem
+     */
+    protected Set<ExpiryInfo> queryExpiryByEntity () throws Exception
+    {
+        Set<ExpiryInfo> info = new HashSet<>();
+
+        //get up to maxResult number of sessions that have expired
+        Query<Entity> query = Query.entityQueryBuilder()
+                .kind(_model.getKind())
+                .filter(CompositeFilter.and(PropertyFilter.gt(_model.getExpiry(), 0), PropertyFilter.le(_model.getExpiry(), System.currentTimeMillis())))
+                .limit(_maxResults)
+                .build();
+
+        QueryResults<Entity> results;
+        if (LOG.isDebugEnabled())
+        {
+            long start = System.currentTimeMillis();
+            results = _datastore.run(query);
+            LOG.debug("Expiry query no index in {}ms", System.currentTimeMillis()-start);
+        }
+        else
+            results = _datastore.run(query);
+        while (results.hasNext())
+        {
+            Entity entity = results.next();
+            info.add(new ExpiryInfo(entity.getString(_model.getId()),entity.getString(_model.getLastNode()), entity.getLong(_model.getExpiry())));
+        }
+
+        return info;
+    }
+
     
-    
-    
+    /** An efficient query to find sessions whose expiry time has passed:
+     * uses a projection query, which requires indexes to be uploaded.
+     * @return id,lastnode and expiry time of sessions that have expired
+     * @throws Exception if datastore experiences a problem
+     */
+    protected Set<ExpiryInfo>  queryExpiryByIndex () throws Exception
+    {
+        Set<ExpiryInfo> info = new HashSet<>();
+        Query<ProjectionEntity> query = Query.projectionEntityQueryBuilder()
+                .kind(_model.getKind())
+                .projection(_model.getId(), _model.getLastNode(), _model.getExpiry())
+                .filter(CompositeFilter.and(PropertyFilter.gt(_model.getExpiry(), 0), PropertyFilter.le(_model.getExpiry(), System.currentTimeMillis())))
+                .limit(_maxResults)
+                .build();
+
+        QueryResults<ProjectionEntity> presults;
+        
+        if (LOG.isDebugEnabled())
+        {
+            long start = System.currentTimeMillis();
+            presults = _datastore.run(query);
+            LOG.debug("Expiry query by index in {}ms", System.currentTimeMillis()-start);
+        }
+        else
+            presults = _datastore.run(query);
+
+        while (presults.hasNext())
+        {
+            ProjectionEntity pe = presults.next();
+            info.add(new ExpiryInfo(pe.getString(_model.getId()),pe.getString(_model.getLastNode()), pe.getLong(_model.getExpiry())));
+        }
+
+        return info;
+    }
+
+
+
     /** 
      * @see org.eclipse.jetty.server.session.SessionDataStore#exists(java.lang.String)
      */
     @Override
     public boolean exists(String id) throws Exception
     {
-        ProjectionEntityQueryBuilder pbuilder = Query.projectionEntityQueryBuilder();
-        pbuilder.kind(KIND);
-        pbuilder.projection(Projection.property(EXPIRY));
-        pbuilder.filter(PropertyFilter.eq(ID, id));
-
-        StructuredQuery<ProjectionEntity> pquery = pbuilder.build();
-        QueryResults<ProjectionEntity> presults = _datastore.run(pquery);
-
-        if (presults.hasNext())
+        if (_indexesPresent)
         {
-            ProjectionEntity pe = presults.next();
-            long expiry = pe.getLong(EXPIRY);
-            if (expiry <= 0)
-                return true; //never expires
+            Query<ProjectionEntity> query = Query.projectionEntityQueryBuilder()
+                    .kind(_model.getKind())
+                    .projection(_model.getExpiry())
+                    .filter(PropertyFilter.eq(_model.getId(), id))
+                    .build();
+
+            QueryResults<ProjectionEntity> presults;
+            if (LOG.isDebugEnabled())
+            {
+                long start = System.currentTimeMillis();
+                presults = _datastore.run(query);
+                LOG.debug("Exists query by index in {}ms", System.currentTimeMillis()-start);
+            }
             else
-                return (expiry > System.currentTimeMillis()); //not expired yet
+                presults = _datastore.run(query);
+
+            if (presults.hasNext())
+            {
+                ProjectionEntity pe = presults.next();
+                return !isExpired(pe.getLong(_model.getExpiry()));
+            }
+            else
+                return false;
         }
         else
+        {
+            Query<Entity> query = Query.entityQueryBuilder()
+                    .kind(_model.getKind())
+                    .filter(PropertyFilter.eq(_model.getId(), id))
+                    .build();
+            
+            QueryResults<Entity> results;
+            if (LOG.isDebugEnabled())
+            {
+                long start = System.currentTimeMillis();
+                results = _datastore.run(query);
+                LOG.debug("Exists query no index in {}ms", System.currentTimeMillis()-start);
+            }
+            else
+                results = _datastore.run(query);
+           
+            if (results.hasNext())
+            {
+                Entity entity = results.next();
+                return !isExpired(entity.getLong(_model.getExpiry()));
+            }
+            else
+                return false;
+        }
+    }
+    
+    /**
+     * Check to see if the given time is in the past.
+     * 
+     * @param timestamp the time to check
+     * @return false if the timestamp is 0 or less, true if it is in the past
+     */
+    protected boolean isExpired (long timestamp)
+    {
+        if (timestamp <= 0)
             return false;
+        else 
+            return timestamp < System.currentTimeMillis(); 
     }
 
     /** 
@@ -340,7 +761,7 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
             }
             catch (DatastoreException e)
             {
-                if (e.code().retryable())
+                if (e.retryable())
                 {
                     if (LOG.isDebugEnabled()) LOG.debug("Datastore put retry {} waiting {}ms", attempts, backoff);
                         
@@ -379,21 +800,48 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
      * @param context the session context
      * @return the key
      */
-    private Key makeKey (String id, SessionContext context)
+    protected Key makeKey (String id, SessionContext context)
     {
         String key = context.getCanonicalContextPath()+"_"+context.getVhost()+"_"+id;
         return _keyFactory.newKey(key);
     }
-    
-    
+
+
+    /**
+     * Check to see if indexes are available, in which case
+     * we can do more performant queries.
+     * @return
+     */
+    protected boolean checkIndexes ()
+    {
+        try
+        {
+            Query<ProjectionEntity> query = Query.projectionEntityQueryBuilder()
+                    .kind(_model.getKind())
+                    .projection(_model.getExpiry())
+                    .filter(PropertyFilter.eq(_model.getId(), "-"))
+                    .build();
+            _datastore.run(query);
+            return true;
+        }
+        catch (DatastoreException e)
+        {
+            //need to assume that the problem is the index doesn't exist, because there
+            //is no specific code for that
+            if (LOG.isDebugEnabled())
+                LOG.debug("Check for indexes", e);
+
+            return false;
+        }
+    }
     /**
      * Generate a gcloud datastore Entity from SessionData
      * @param session the session data
      * @param key the key
      * @return the entity
-     * @throws Exception
+     * @throws Exception if there is a deserialization error
      */
-    private Entity entityFromSession (SessionData session, Key key) throws Exception
+    protected Entity entityFromSession (SessionData session, Key key) throws Exception
     {
         if (session == null)
             return null;
@@ -408,17 +856,17 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
         
         //turn a session into an entity         
         entity = Entity.builder(key)
-                .set(ID, session.getId())
-                .set(CONTEXTPATH, session.getContextPath())
-                .set(VHOST, session.getVhost())
-                .set(ACCESSED, session.getAccessed())
-                .set(LASTACCESSED, session.getLastAccessed())
-                .set(CREATETIME, session.getCreated())
-                .set(COOKIESETTIME, session.getCookieSet())
-                .set(LASTNODE,session.getLastNode())
-                .set(EXPIRY, session.getExpiry())
-                .set(MAXINACTIVE, session.getMaxInactiveMs())
-                .set(ATTRIBUTES, BlobValue.builder(Blob.copyFrom(baos.toByteArray())).indexed(false).build()).build();
+                .set(_model.getId(), session.getId())
+                .set(_model.getContextPath(), session.getContextPath())
+                .set(_model.getVhost(), session.getVhost())
+                .set(_model.getAccessed(), session.getAccessed())
+                .set(_model.getLastAccessed(), session.getLastAccessed())
+                .set(_model.getCreateTime(), session.getCreated())
+                .set(_model.getCookieSetTime(), session.getCookieSet())
+                .set(_model.getLastNode(),session.getLastNode())
+                .set(_model.getExpiry(), session.getExpiry())
+                .set(_model.getMaxInactive(), session.getMaxInactiveMs())
+                .set(_model.getAttributes(), BlobValue.builder(Blob.copyFrom(baos.toByteArray())).excludeFromIndexes(true).build()).build();
 
                  
         return entity;
@@ -430,7 +878,7 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
      * @return the session data
      * @throws Exception if unable to get the entity
      */
-    private SessionData sessionFromEntity (Entity entity) throws Exception
+    protected SessionData sessionFromEntity (Entity entity) throws Exception
     {
         if (entity == null)
             return null;
@@ -444,17 +892,17 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
                 try
                 {
                     //turn an Entity into a Session
-                    String id = entity.getString(ID);
-                    String contextPath = entity.getString(CONTEXTPATH);
-                    String vhost = entity.getString(VHOST);
-                    long accessed = entity.getLong(ACCESSED);
-                    long lastAccessed = entity.getLong(LASTACCESSED);
-                    long createTime = entity.getLong(CREATETIME);
-                    long cookieSet = entity.getLong(COOKIESETTIME);
-                    String lastNode = entity.getString(LASTNODE);
-                    long expiry = entity.getLong(EXPIRY);
-                    long maxInactive = entity.getLong(MAXINACTIVE);
-                    Blob blob = (Blob) entity.getBlob(ATTRIBUTES);
+                    String id = entity.getString(_model.getId());
+                    String contextPath = entity.getString(_model.getContextPath());
+                    String vhost = entity.getString(_model.getVhost());
+                    long accessed = entity.getLong(_model.getAccessed());
+                    long lastAccessed = entity.getLong(_model.getLastAccessed());
+                    long createTime = entity.getLong(_model.getCreateTime());
+                    long cookieSet = entity.getLong(_model.getCookieSetTime());
+                    String lastNode = entity.getString(_model.getLastNode());
+                    long expiry = entity.getLong(_model.getExpiry());
+                    long maxInactive = entity.getLong(_model.getMaxInactive());
+                    Blob blob = (Blob) entity.getBlob(_model.getAttributes());
 
                     SessionData session = newSessionData (id, createTime, accessed, lastAccessed, maxInactive);
                     session.setLastNode(lastNode);
@@ -497,6 +945,16 @@ public class GCloudSessionDataStore extends AbstractSessionDataStore
     public boolean isPassivating()
     {
        return true;
+    }
+
+
+    /** 
+     * @see org.eclipse.jetty.server.session.AbstractSessionDataStore#toString()
+     */
+    @Override
+    public String toString()
+    {
+        return String.format("%s[namespace=%s,backoff=%d,maxRetries=%d,maxResults=%d,indexes=%b]",super.toString(), _namespace, _backoff, _maxRetries, _maxResults,_indexesPresent);
     }
     
     

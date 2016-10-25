@@ -27,8 +27,10 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Enumeration;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletOutputStream;
@@ -320,29 +322,9 @@ public class Response implements HttpServletResponse
             buf.append(";Comment=");
             quoteOnlyOrAppend(buf,comment,isQuoteNeededForCookie(comment));
         }
-
-        // remove any existing set-cookie fields of same name
-        Iterator<HttpField> i=_fields.iterator();
-        while (i.hasNext())
-        {
-            HttpField field=i.next();
-            if (field.getHeader()==HttpHeader.SET_COOKIE)
-            {
-                String val = field.getValue();
-                if (val!=null && val.startsWith(name_equals))
-                {
-                    //existing cookie has same name, does it also match domain and path?
-                    if (((!has_domain && !val.contains("Domain")) || (has_domain && val.contains(domain))) &&
-                        ((!has_path && !val.contains("Path")) || (has_path && val.contains(path))))
-                    {
-                        i.remove();
-                    }
-                }
-            }
-        }
-
+        
         // add the set cookie
-        _fields.add(HttpHeader.SET_COOKIE.toString(), buf.toString());
+        _fields.add(HttpHeader.SET_COOKIE, buf.toString());
 
         // Expire responses with set-cookie headers so they do not get cached.
         _fields.put(__EXPIRES_01JAN1970);
@@ -529,6 +511,9 @@ public class Response implements HttpServletResponse
                 LOG.debug("Aborting on sendError on committed response {} {}",code,message);
             code=-1;
         }
+        else
+            resetBuffer();
+        
 
         switch(code)
         {
@@ -542,7 +527,7 @@ public class Response implements HttpServletResponse
                 break;
         }
 
-        resetBuffer();
+
         _mimeType=null;
         _characterEncoding=null;
         _outputType = OutputType.NONE;
@@ -985,7 +970,7 @@ public class Response implements HttpServletResponse
         if (isIncluding() || isWriting())
             return;
 
-        if (_outputType == OutputType.NONE && !isCommitted())
+        if (_outputType != OutputType.WRITER && !isCommitted())
         {
             if (encoding == null)
             {
@@ -1138,14 +1123,24 @@ public class Response implements HttpServletResponse
     @Override
     public void reset()
     {
+        reset(false);
+    }
+
+    public void reset(boolean preserveCookies)
+    { 
         resetForForward();
         _status = 200;
         _reason = null;
         _contentLength = -1;
+        
+        List<HttpField> cookies = preserveCookies
+            ?_fields.stream()
+            .filter(f->f.getHeader()==HttpHeader.SET_COOKIE)
+            .collect(Collectors.toList()):null;
+        
         _fields.clear();
 
-        String connection = _channel.getRequest().getHeader(HttpHeader.CONNECTION.asString());
-
+        String connection = _channel.getRequest().getHeader(HttpHeader.CONNECTION.asString());  
         if (connection != null)
         {
             for (String value: StringUtil.csvSplit(null,connection,0,connection.length()))
@@ -1172,21 +1167,23 @@ public class Response implements HttpServletResponse
                 }
             }
         }
-    }
 
-    public void reset(boolean preserveCookies)
-    {
-        if (!preserveCookies)
-            reset();
+        if (preserveCookies)
+            cookies.forEach(f->_fields.add(f));
         else
         {
-            ArrayList<String> cookieValues = new ArrayList<>(5);
-            Enumeration<String> vals = _fields.getValues(HttpHeader.SET_COOKIE.asString());
-            while (vals.hasMoreElements())
-                cookieValues.add(vals.nextElement());
-            reset();
-            for (String v:cookieValues)
-                _fields.add(HttpHeader.SET_COOKIE, v);
+            Request request = getHttpChannel().getRequest();
+            HttpSession session = request.getSession(false);
+            if (session!=null && session.isNew())
+            {
+                SessionHandler sh = request.getSessionHandler();
+                if (sh!=null)
+                {
+                    HttpCookie c=sh.getSessionCookie(session,request.getContextPath(),request.isSecure());
+                    if (c!=null)
+                        addCookie(c);
+                }
+            }
         }
     }
 
@@ -1199,9 +1196,6 @@ public class Response implements HttpServletResponse
     @Override
     public void resetBuffer()
     {
-        if (isCommitted())
-            throw new IllegalStateException("cannot reset buffer on committed response");
-
         _out.resetBuffer();
     }
 

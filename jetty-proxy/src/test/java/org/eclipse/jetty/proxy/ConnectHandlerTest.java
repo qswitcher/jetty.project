@@ -38,12 +38,13 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.eclipse.jetty.http.HttpStatus;
+import org.eclipse.jetty.http.HttpTester;
 import org.eclipse.jetty.io.EndPoint;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.toolchain.test.http.SimpleHttpResponse;
 import org.eclipse.jetty.util.B64Code;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Promise;
@@ -66,7 +67,7 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
 
     @Test
     public void testCONNECT() throws Exception
-    {
+    {   
         String hostPort = "localhost:" + serverConnector.getLocalPort();
         String request = "" +
                 "CONNECT " + hostPort + " HTTP/1.1\r\n" +
@@ -75,14 +76,34 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(socket.getInputStream());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+        }
+    }
+
+    @Test
+    public void testCONNECTwithIPv6() throws Exception
+    {
+        String hostPort = "[::1]:" + serverConnector.getLocalPort();
+        String request = "" +
+                "CONNECT " + hostPort + " HTTP/1.1\r\n" +
+                "Host: " + hostPort + "\r\n" +
+                "\r\n";
+        try (Socket socket = newSocket())
+        {
+            OutputStream output = socket.getOutputStream();
+
+            output.write(request.getBytes(StandardCharsets.UTF_8));
+            output.flush();
+
+            // Expect 200 OK from the CONNECT request
+            HttpTester.Response response = readResponse(socket.getInputStream());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
         }
     }
 
@@ -97,14 +118,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -114,8 +135,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -134,14 +155,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 403 from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("403", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.FORBIDDEN_403, response.getStatus());
 
             // Socket should be closed
             Assert.assertEquals(-1, input.read());
@@ -155,14 +176,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -172,8 +193,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -192,14 +213,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 403 from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("403", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.FORBIDDEN_403, response.getStatus());
 
             // Socket should be closed
             Assert.assertEquals(-1, input.read());
@@ -213,14 +234,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -230,8 +251,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -269,15 +290,15 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 407 from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("407", response.getCode());
-            Assert.assertTrue(response.getHeaders().containsKey("Proxy-Authenticate".toLowerCase(Locale.ENGLISH)));
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.PROXY_AUTHENTICATION_REQUIRED_407, response.getStatus());
+            Assert.assertTrue(response.containsKey("Proxy-Authenticate".toLowerCase(Locale.ENGLISH)));
 
             // Socket should be closed
             Assert.assertEquals(-1, input.read());
@@ -293,14 +314,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -310,8 +331,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -341,23 +362,18 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
                 "CONNECT " + hostPort + " HTTP/1.1\r\n" +
                 "Host: " + hostPort + "\r\n" +
                 "\r\n";
-        Socket socket = newSocket();
-        socket.setSoTimeout(30000);
-        try
+        try (Socket socket = newSocket())
         {
+            socket.setSoTimeout(30000);
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 500 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("Response Code", "500", response.getCode());
-        }
-        finally
-        {
-            socket.close();
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals("Response Code", HttpStatus.INTERNAL_SERVER_ERROR_500, response.getStatus());
         }
     }
 
@@ -372,14 +388,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -389,8 +405,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -408,19 +424,19 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             // The pipelined request must have gone up to the server as is
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -435,14 +451,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             for (int i = 0; i < 10; ++i)
             {
@@ -454,8 +470,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
                 output.flush();
 
                 response = readResponse(input);
-                Assert.assertEquals("200", response.getCode());
-                Assert.assertEquals("GET /echo", response.getBody());
+                Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+                Assert.assertEquals("GET /echo", response.getContent());
             }
         }
     }
@@ -471,14 +487,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo HTTP/1.1\r\n" +
@@ -488,8 +504,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
 
             // Idle server is shut down
             disposeServer();
@@ -510,14 +526,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /close HTTP/1.1\r\n" +
@@ -542,14 +558,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "POST /echo HTTP/1.1\r\n" +
@@ -561,8 +577,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("POST /echo\r\nHELLO", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("POST /echo\r\nHELLO", response.getContent());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -572,14 +588,21 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
     @Test
     public void testCONNECTAndPOSTWithBigBody() throws Exception
     {
+        // Use a longer idle timeout since this test
+        // may take a long time on slower machines.
+        long idleTimeout = 5 * 60 * 1000;
+        serverConnector.setIdleTimeout(idleTimeout);
+        proxyConnector.setIdleTimeout(idleTimeout);
+        connectHandler.setIdleTimeout(idleTimeout);
+
         String hostPort = "localhost:" + serverConnector.getLocalPort();
 
         String request = "" +
@@ -588,15 +611,16 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
                 "\r\n";
         try (Socket socket = newSocket())
         {
+            socket.setSoTimeout((int)idleTimeout);
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             StringBuilder body = new StringBuilder();
             String chunk = "0123456789ABCDEF";
@@ -613,8 +637,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("POST /echo\r\n" + body, response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("POST /echo\r\n" + body, response.getContent());
         }
     }
 
@@ -674,14 +698,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             String body = "0123456789ABCDEF";
             request = "" +
@@ -694,8 +718,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
             output.flush();
 
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("POST /echo\r\n" + body, response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("POST /echo\r\n" + body, response.getContent());
         }
     }
 
@@ -713,20 +737,20 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
             socket.shutdownOutput();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             // The pipelined request must have gone up to the server as is
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -741,14 +765,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
         try (Socket socket = newSocket())
         {
             OutputStream output = socket.getOutputStream();
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            InputStream input = socket.getInputStream();
 
             output.write(request.getBytes(StandardCharsets.UTF_8));
             output.flush();
 
             // Expect 200 OK from the CONNECT request
-            SimpleHttpResponse response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
+            HttpTester.Response response = readResponse(input);
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
 
             request = "" +
                     "GET /echo" + " HTTP/1.1\r\n" +
@@ -760,8 +784,8 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
 
             // The pipelined request must have gone up to the server as is
             response = readResponse(input);
-            Assert.assertEquals("200", response.getCode());
-            Assert.assertEquals("GET /echo", response.getBody());
+            Assert.assertEquals(HttpStatus.OK_200, response.getStatus());
+            Assert.assertEquals("GET /echo", response.getContent());
         }
     }
 
@@ -787,10 +811,14 @@ public class ConnectHandlerTest extends AbstractConnectHandlerTest
                     while ((read = input.read()) >= 0)
                         baos.write(read);
                     baos.close();
+                    byte[] bytes = baos.toByteArray();
 
                     ServletOutputStream output = httpResponse.getOutputStream();
-                    output.println(builder.toString());
-                    output.write(baos.toByteArray());
+                    if (bytes.length == 0)
+                        output.print(builder.toString());
+                    else
+                        output.println(builder.toString());
+                    output.write(bytes);
                     break;
                 }
                 case "/close":

@@ -29,6 +29,7 @@ import org.eclipse.jetty.http.HttpFields;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.http.PreEncodedHttpField;
+import org.eclipse.jetty.http.QuotedCSV;
 import org.eclipse.jetty.server.HttpChannel;
 import org.eclipse.jetty.server.HttpOutput;
 import org.eclipse.jetty.server.Response;
@@ -158,6 +159,19 @@ public class GzipHttpOutputInterceptor implements HttpOutput.Interceptor
         {
             LOG.debug("{} exclude by status {}",this,sc);
             noCompression();
+
+            if (sc==304)
+            {
+                String request_etags = (String)_channel.getRequest().getAttribute("o.e.j.s.h.gzip.GzipHandler.etag");
+                String response_etag = response.getHttpFields().get(HttpHeader.ETAG);
+                if (request_etags!=null && response_etag!=null)
+                {
+                    String response_etag_gzip=etagGzip(response_etag);
+                    if (request_etags.contains(response_etag_gzip))
+                        response.getHttpFields().put(HttpHeader.ETAG,response_etag_gzip);
+                }
+            }
+            
             _interceptor.write(content, complete, callback);
             return;
         }
@@ -177,7 +191,8 @@ public class GzipHttpOutputInterceptor implements HttpOutput.Interceptor
         }
 
         // Has the Content-Encoding header already been set?
-        String ce=response.getHeader("Content-Encoding");
+        HttpFields fields = response.getHttpFields();
+        String ce=fields.get(HttpHeader.CONTENT_ENCODING);
         if (ce != null)
         {
             LOG.debug("{} exclude by content-encoding {}",this,ce);
@@ -190,9 +205,13 @@ public class GzipHttpOutputInterceptor implements HttpOutput.Interceptor
         if (_state.compareAndSet(GZState.MIGHT_COMPRESS,GZState.COMMITTING))
         {
             // We are varying the response due to accept encoding header.
-            HttpFields fields = response.getHttpFields();
             if (_vary != null)
-                fields.add(_vary);
+            {
+                if (fields.contains(HttpHeader.VARY))
+                    fields.addCSV(HttpHeader.VARY,_vary.getValues());
+                else
+                    fields.add(_vary);
+            }
 
             long content_length = response.getContentLength();
             if (content_length<0 && complete)
@@ -217,11 +236,7 @@ public class GzipHttpOutputInterceptor implements HttpOutput.Interceptor
             response.setContentLength(-1);
             String etag=fields.get(HttpHeader.ETAG);
             if (etag!=null)
-            {
-                int end = etag.length()-1;
-                etag=(etag.charAt(end)=='"')?etag.substring(0,end)+ GZIP._etag+'"':etag+GZIP._etag;
-                fields.put(HttpHeader.ETAG,etag);
-            }
+                fields.put(HttpHeader.ETAG,etagGzip(etag));
 
             LOG.debug("{} compressing {}",this,_deflater);
             _state.set(GZState.COMPRESSING);
@@ -232,6 +247,12 @@ public class GzipHttpOutputInterceptor implements HttpOutput.Interceptor
             callback.failed(new WritePendingException());
     }
 
+    private String etagGzip(String etag)
+    {
+        int end = etag.length()-1;
+        return (etag.charAt(end)=='"')?etag.substring(0,end)+ GZIP._etag+'"':etag+GZIP._etag;
+    }
+    
     public void noCompression()
     {
         while (true)

@@ -18,7 +18,6 @@
 
 package org.eclipse.jetty.http;
 
-import java.util.ArrayList;
 import java.util.Objects;
 
 import org.eclipse.jetty.util.StringUtil;
@@ -83,116 +82,15 @@ public class HttpField
 
     public String[] getValues()
     {
-        ArrayList<String> list = new ArrayList<>();
-        int state = 0;
-        int start=0;
-        int end=0;
-        StringBuilder builder = new StringBuilder();
-
-        for (int i=0;i<_value.length();i++)
-        {
-            char c = _value.charAt(i);
-            switch(state)
-            {
-                case 0: // initial white space
-                    switch(c)
-                    {
-                        case '"': // open quote
-                            state=2;
-                            break;
-
-                        case ',': // ignore leading empty field
-                            break;
-
-                        case ' ': // more white space
-                        case '\t':
-                            break;
-
-                        default: // character
-                            start=i;
-                            end=i;
-                            state=1;
-                    }
-                    break;
-
-                case 1: // In token
-                    switch(c)
-                    {
-                        case ',': // next field
-                            list.add(_value.substring(start,end+1));
-                            state=0;
-                            break;
-
-                        case ' ': // more white space
-                        case '\t':
-                            break;
-
-                        default:
-                            end=i;
-                    }
-                    break;
-
-                case 2: // In Quoted
-                    switch(c)
-                    {
-                        case '\\': // next field
-                            state=3;
-                            break;
-
-                        case '"': // end quote
-                            list.add(builder.toString());
-                            builder.setLength(0);
-                            state=4;
-                            break;
-
-                        default:
-                            builder.append(c);
-                    }
-                    break;
-
-                case 3: // In Quoted Quoted
-                    builder.append(c);
-                    state=2;
-                    break;
-
-                case 4: // WS after end quote
-                    switch(c)
-                    {
-                        case ' ': // white space
-                        case '\t': // white space
-                            break;
-
-                        case ',': // white space
-                            state=0;
-                            break;
-
-                        default:
-                            throw new IllegalArgumentException("c="+(int)c);
-
-                    }
-                    break;
-            }
-        }
-
-        switch(state)
-        {
-            case 0:
-                break;
-            case 1:
-                list.add(_value.substring(start,end+1));
-                break;
-            case 4:
-                break;
-
-            default:
-                throw new IllegalArgumentException("state="+state);
-        }
-
-        return list.toArray(new String[list.size()]);
+        if (_value == null)
+            return null;
+        
+        QuotedCSV list = new QuotedCSV(false,_value);
+        return list.getValues().toArray(new String[list.size()]);
     }
 
-    /* ------------------------------------------------------------ */
-    /** Look for a value in a possible multi valued field
+    /**
+     * Look for a value in a possible multi valued field
      * @param search Values to search for (case insensitive)
      * @return True iff the value is contained in the field value entirely or
      * as an element of a quoted comma separated list. List element parameters (eg qualities) are ignored,
@@ -206,7 +104,9 @@ public class HttpField
             return false;
         if (_value==null)
             return false;
-        
+        if (search.equals(_value))
+            return true;
+
         search = StringUtil.asciiToLowerCase(search);
 
         int state=0;
@@ -410,9 +310,10 @@ public class HttpField
     @Override
     public int hashCode()
     {
+        int vhc = Objects.hashCode(_value);
         if (_header==null)
-            return _value.hashCode() ^ nameHashCode();
-        return _value.hashCode() ^ _header.hashCode();
+            return vhc ^ nameHashCode();
+        return vhc ^ _header.hashCode();
     }
 
     @Override

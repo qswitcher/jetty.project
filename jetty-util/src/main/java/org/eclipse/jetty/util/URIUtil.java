@@ -19,6 +19,7 @@
 package org.eclipse.jetty.util;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -35,10 +36,6 @@ import org.eclipse.jetty.util.log.Logger;
  * It differs from the java.net.URL class as it does not provide
  * communications ability, but it does assist with query string
  * formatting.
- * </p>
- * <p>
- * UTF-8 encoding is used by default for % encoded characters. This
- * may be overridden with the org.eclipse.jetty.util.URI.charset system property.
  * </p>
  * 
  * @see UrlEncoded
@@ -724,10 +721,7 @@ public class URIUtil
      */
     public static void appendSchemeHostPort(StringBuilder url,String scheme,String server, int port)
     {
-        if (server.indexOf(':')>=0&&server.charAt(0)!='[')
-            url.append(scheme).append("://").append('[').append(server).append(']');
-        else
-            url.append(scheme).append("://").append(server);
+        url.append(scheme).append("://").append(HostPort.normalizeHost(server));
 
         if (port > 0)
         {
@@ -761,10 +755,7 @@ public class URIUtil
     {
         synchronized (url)
         {
-            if (server.indexOf(':')>=0&&server.charAt(0)!='[')
-                url.append(scheme).append("://").append('[').append(server).append(']');
-            else
-                url.append(scheme).append("://").append(server);
+            url.append(scheme).append("://").append(HostPort.normalizeHost(server));
 
             if (port > 0)
             {
@@ -852,5 +843,31 @@ public class URIUtil
         encodePath(buf,path,offset);
 
         return URI.create(buf.toString());
+    }
+    
+    public static URI getJarSource(URI uri)
+    {
+        try
+        {
+            if (!"jar".equals(uri.getScheme()))
+                return uri;
+            String s = uri.getSchemeSpecificPart();
+            int bang_slash = s.indexOf("!/");
+            if (bang_slash>=0)
+                s=s.substring(0,bang_slash);
+            return new URI(s);
+        }
+        catch(URISyntaxException e)
+        {
+            throw new IllegalArgumentException(e);
+        }
+    }
+    
+    public static String getJarSource(String uri)
+    {
+        if (!uri.startsWith("jar:"))
+            return uri;
+        int bang_slash = uri.indexOf("!/");
+        return (bang_slash>=0)?uri.substring(4,bang_slash):uri.substring(4);
     }
 }

@@ -30,19 +30,20 @@ import org.eclipse.jetty.server.session.SessionHandler;
  */
 public class GCloudSessionDataStoreFactory extends AbstractSessionDataStoreFactory
 {
-    private GCloudConfiguration _config;
+    private String _namespace;
     private int _maxRetries;
     private int _backoffMs;
+    private GCloudSessionDataStore.EntityDataModel _model;
     
     
-    public GCloudConfiguration getGCloudConfiguration()
+    public GCloudSessionDataStore.EntityDataModel getEntityDataModel()
     {
-        return _config;
+        return _model;
     }
-
-    public void setGCloudConfiguration(GCloudConfiguration config)
+    
+    public void setEntityDataModel(GCloudSessionDataStore.EntityDataModel model)
     {
-        _config = config;
+        _model = model;
     }
 
     public int getMaxRetries()
@@ -66,6 +67,22 @@ public class GCloudSessionDataStoreFactory extends AbstractSessionDataStoreFacto
     }
 
     
+    /**
+     * @return the namespace
+     */
+    public String getNamespace()
+    {
+        return _namespace;
+    }
+
+    /**
+     * @param namespace the namespace to set
+     */
+    public void setNamespace(String namespace)
+    {
+        _namespace = namespace;
+    }
+
     /** 
      * @see org.eclipse.jetty.server.session.SessionDataStoreFactory#getSessionDataStore(org.eclipse.jetty.server.session.SessionHandler)
      */
@@ -73,10 +90,10 @@ public class GCloudSessionDataStoreFactory extends AbstractSessionDataStoreFacto
     public SessionDataStore getSessionDataStore(SessionHandler handler) throws Exception
     {
         GCloudSessionDataStore ds = new GCloudSessionDataStore();
-        ds.setGCloudConfiguration(getGCloudConfiguration());
         ds.setBackoffMs(getBackoffMs());
         ds.setMaxRetries(getMaxRetries());
         ds.setGracePeriodSec(getGracePeriodSec());
+        ds.setNamespace(_namespace);
         return ds;
     }
 

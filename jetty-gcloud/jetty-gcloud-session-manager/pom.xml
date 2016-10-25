@@ -17,8 +17,8 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.google.gcloud</groupId>
-      <artifactId>gcloud-java-datastore</artifactId>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-datastore</artifactId>
       <version>${gcloud.version}</version>
     </dependency>
     <dependency>

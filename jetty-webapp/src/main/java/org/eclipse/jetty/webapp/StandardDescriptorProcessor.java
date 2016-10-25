@@ -36,10 +36,10 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.SessionTrackingMode;
 
+import org.eclipse.jetty.http.pathmap.ServletPathSpec;
 import org.eclipse.jetty.security.ConstraintAware;
 import org.eclipse.jetty.security.ConstraintMapping;
 import org.eclipse.jetty.security.authentication.FormAuthenticator;
-import org.eclipse.jetty.servlet.BaseHolder.Source;
 import org.eclipse.jetty.servlet.ErrorPageErrorHandler;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.FilterMapping;
@@ -49,6 +49,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler.JspPropertyGroup;
 import org.eclipse.jetty.servlet.ServletContextHandler.TagLib;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.servlet.ServletMapping;
+import org.eclipse.jetty.servlet.Source;
 import org.eclipse.jetty.util.ArrayUtil;
 import org.eclipse.jetty.util.Loader;
 import org.eclipse.jetty.util.StringUtil;
@@ -213,7 +214,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
         //If servlet of that name does not already exist, create it.
         if (holder == null)
         {
-            holder = context.getServletHandler().newServletHolder(Source.DESCRIPTOR);
+            holder = context.getServletHandler().newServletHolder(new Source (Source.Origin.DESCRIPTOR, descriptor.getResource().toString()));
             holder.setName(name);
             _servletHolderMap.put(name,holder);
             _servletHolders.add(holder);
@@ -1181,7 +1182,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
 
     public ServletMapping addServletMapping (String servletName, XmlParser.Node node, WebAppContext context, Descriptor descriptor)
     {
-        ServletMapping mapping = new ServletMapping();
+        ServletMapping mapping = new ServletMapping(new Source(Source.Origin.DESCRIPTOR, descriptor.getResource().toString()));
         mapping.setServletName(servletName);
         mapping.setDefault(descriptor instanceof DefaultsDescriptor);
         
@@ -1190,7 +1191,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
         while (iter.hasNext())
         {
             String p = iter.next().toString(false, true);
-            p = normalizePattern(p);
+            p = ServletPathSpec.normalize(p);
             
             //check if there is already a mapping for this path
             ListIterator<ServletMapping> listItor = _servletMappings.listIterator();
@@ -1254,7 +1255,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
         while (iter.hasNext())
         {
             String p = iter.next().toString(false, true);
-            p = normalizePattern(p);
+            p = ServletPathSpec.normalize(p);
             paths.add(p);
             context.getMetaData().setOrigin(filterName+".filter.mapping."+p, descriptor);
         }
@@ -1338,7 +1339,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
             while (iter2.hasNext())
             {
                 String url = iter2.next().toString(false, true);
-                url = normalizePattern(url);
+                url = ServletPathSpec.normalize(url);
                 paths.add( url);
                 jpg.addUrlPattern(url);
             }
@@ -1415,7 +1416,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
             else
             {
                 //no mapping for jsp yet, make one
-                ServletMapping mapping = new ServletMapping();
+                ServletMapping mapping = new ServletMapping(new Source(Source.Origin.DESCRIPTOR, descriptor.getResource().toString()));
                 mapping.setServletName("jsp");
                 mapping.setPathSpecs(paths.toArray(new String[paths.size()]));
                 _servletMappings.add(mapping);
@@ -1478,7 +1479,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
                 while (iter2.hasNext())
                 {
                     String url = iter2.next().toString(false, true);
-                    url = normalizePattern(url);
+                    url = ServletPathSpec.normalize(url);
                     //remember origin so we can process ServletRegistration.Dynamic.setServletSecurityElement() correctly
                     context.getMetaData().setOrigin("constraint.url."+url, descriptor);
                     
@@ -1710,7 +1711,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
         FilterHolder holder = _filterHolderMap.get(name);
         if (holder == null)
         {
-            holder = context.getServletHandler().newFilterHolder(Source.DESCRIPTOR);
+            holder = context.getServletHandler().newFilterHolder(new Source (Source.Origin.DESCRIPTOR, descriptor.getResource().toString()));
             holder.setName(name);
             _filterHolderMap.put(name,holder);
             _filterHolders.add(holder);
@@ -1896,7 +1897,7 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
                 ((WebDescriptor)descriptor).addClassName(className);
 
                 Class<? extends EventListener> listenerClass = (Class<? extends EventListener>)context.loadClass(className);
-                listener = newListenerInstance(context,listenerClass);
+                listener = newListenerInstance(context,listenerClass, descriptor);
                 if (!(listener instanceof EventListener))
                 {
                     LOG.warn("Not an EventListener: " + listener);
@@ -1938,19 +1939,13 @@ public class StandardDescriptorProcessor extends IterativeDescriptorProcessor
         ((ConstraintAware)context.getSecurityHandler()).setDenyUncoveredHttpMethods(true);
     }
 
-    public EventListener newListenerInstance(WebAppContext context,Class<? extends EventListener> clazz) throws Exception
+    public EventListener newListenerInstance(WebAppContext context,Class<? extends EventListener> clazz, Descriptor descriptor) throws Exception
     {
-        ListenerHolder h = context.getServletHandler().newListenerHolder(Source.DESCRIPTOR);
+        ListenerHolder h = context.getServletHandler().newListenerHolder(new Source (Source.Origin.DESCRIPTOR, descriptor.getResource().toString()));
         EventListener l = context.getServletContext().createInstance(clazz);
         h.setListener(l);
         context.getServletHandler().addListener(h);
         return l;
 
-    }
-
-    public String normalizePattern(String p)
-    {
-        if (p != null && p.length() > 0 && !p.startsWith("/") && !p.startsWith("*")) return "/" + p;
-        return p;
     }
 }

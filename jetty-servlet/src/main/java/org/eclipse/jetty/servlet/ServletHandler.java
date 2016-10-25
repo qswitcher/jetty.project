@@ -63,7 +63,6 @@ import org.eclipse.jetty.server.ServletResponseHttpWrapper;
 import org.eclipse.jetty.server.UserIdentity;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ScopedHandler;
-import org.eclipse.jetty.servlet.BaseHolder.Source;
 import org.eclipse.jetty.util.ArrayUtil;
 import org.eclipse.jetty.util.LazyList;
 import org.eclipse.jetty.util.MultiException;
@@ -108,6 +107,7 @@ public class ServletHandler extends ScopedHandler
     private boolean _startWithUnavailable=false;
     private boolean _ensureDefaultServlet=true;
     private IdentityService _identityService;
+    private boolean _allowDuplicateMappings=false;
 
     private ServletHolder[] _servlets=new ServletHolder[0];
     private ServletMapping[] _servletMappings;
@@ -687,6 +687,22 @@ public class ServletHandler extends ScopedHandler
         _startWithUnavailable=start;
     }
 
+    /**
+     * @return the allowDuplicateMappings
+     */
+    public boolean isAllowDuplicateMappings()
+    {
+        return _allowDuplicateMappings;
+    }
+
+    /**
+     * @param allowDuplicateMappings the allowDuplicateMappings to set
+     */
+    public void setAllowDuplicateMappings(boolean allowDuplicateMappings)
+    {
+        _allowDuplicateMappings = allowDuplicateMappings;
+    }
+
     /* ------------------------------------------------------------ */
     /**
      * @return True if this handler will start with unavailable servlets
@@ -802,7 +818,7 @@ public class ServletHandler extends ScopedHandler
     }
     
     /* ------------------------------------------------------------ */
-    public ListenerHolder newListenerHolder(Holder.Source source)
+    public ListenerHolder newListenerHolder(Source source)
     {
         return new ListenerHolder(source);
     }
@@ -822,7 +838,7 @@ public class ServletHandler extends ScopedHandler
      * @param source the holder source
      * @return the servlet holder
      */
-    public ServletHolder newServletHolder(Holder.Source source)
+    public ServletHolder newServletHolder(Source source)
     {
         return new ServletHolder(source);
     }
@@ -915,7 +931,7 @@ public class ServletHandler extends ScopedHandler
     }
 
     /* ------------------------------------------------------------ */
-    public FilterHolder newFilterHolder(Holder.Source source)
+    public FilterHolder newFilterHolder(Source source)
     {
         return new FilterHolder(source);
     }
@@ -1313,7 +1329,7 @@ public class ServletHandler extends ScopedHandler
             Map<String,ServletMapping> servletPathMappings = new HashMap<>();
 
             //create a map of paths to set of ServletMappings that define that mapping
-            HashMap<String, Set<ServletMapping>> sms = new HashMap<>();
+            HashMap<String, List<ServletMapping>> sms = new HashMap<>();
             for (ServletMapping servletMapping : _servletMappings)
             {
                 String[] pathSpecs = servletMapping.getPathSpecs();
@@ -1321,10 +1337,10 @@ public class ServletHandler extends ScopedHandler
                 {
                     for (String pathSpec : pathSpecs)
                     {
-                        Set<ServletMapping> mappings = sms.get(pathSpec);
+                        List<ServletMapping> mappings = sms.get(pathSpec);
                         if (mappings == null)
                         {
-                            mappings = new HashSet<>();
+                            mappings = new ArrayList<>();
                             sms.put(pathSpec, mappings);
                         }
                         mappings.add(servletMapping);
@@ -1337,7 +1353,7 @@ public class ServletHandler extends ScopedHandler
             {
                 //for each path, look at the mappings where it is referenced
                 //if a mapping is for a servlet that is not enabled, skip it
-                Set<ServletMapping> mappings = sms.get(pathSpec);
+                List<ServletMapping> mappings = sms.get(pathSpec);
 
                 ServletMapping finalMapping = null;
                 for (ServletMapping mapping : mappings)
@@ -1355,22 +1371,39 @@ public class ServletHandler extends ScopedHandler
                         finalMapping = mapping;
                     else
                     {
-                        //already have a candidate - only accept another one if the candidate is a default
+                        //already have a candidate - only accept another one 
+                        //if the candidate is a default, or we're allowing duplicate mappings
                         if (finalMapping.isDefault())
                             finalMapping = mapping;
+                        else if (isAllowDuplicateMappings())
+                        {
+                            LOG.warn("Multiple servlets map to path {}: {} and {}, choosing {}", pathSpec, finalMapping.getServletName(), mapping.getServletName(), mapping);
+                            finalMapping = mapping;
+                        }
                         else
                         {
                             //existing candidate isn't a default, if the one we're looking at isn't a default either, then its an error
-                            if (!mapping.isDefault())
-                                throw new IllegalStateException("Multiple servlets map to path: "+pathSpec+": "+finalMapping.getServletName()+","+mapping.getServletName());
+                            if (!mapping.isDefault())          
+                            {
+                                ServletHolder finalMappedServlet = _servletNameMap.get(finalMapping.getServletName());
+                                throw new IllegalStateException("Multiple servlets map to path "
+                                        +pathSpec+": "
+                                        +finalMappedServlet.getName()+"[mapped:"+finalMapping.getSource()+"],"
+                                        +mapping.getServletName()+"[mapped:"+mapping.getSource()+"]");
+                            }
                         }
                     }
                 }
                 if (finalMapping == null)
                     throw new IllegalStateException ("No acceptable servlet mappings for "+pathSpec);
            
-                if (LOG.isDebugEnabled()) LOG.debug("Chose path={} mapped to servlet={} from default={}", pathSpec, finalMapping.getServletName(), finalMapping.isDefault());
-               
+                if (LOG.isDebugEnabled()) 
+                    LOG.debug("Path={}[{}] mapped to servlet={}[{}]",
+                              pathSpec,
+                              finalMapping.getSource(),
+                              finalMapping.getServletName(),
+                              _servletNameMap.get(finalMapping.getServletName()).getSource());
+
                 servletPathMappings.put(pathSpec, finalMapping);
                 pm.put(new ServletPathSpec(pathSpec),_servletNameMap.get(finalMapping.getServletName()));
             }

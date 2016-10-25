@@ -62,6 +62,7 @@ public class HttpChannelState
         ASYNC_WAIT,       // Suspended and waiting
         ASYNC_WOKEN,      // Dispatch to handle from ASYNC_WAIT
         ASYNC_IO,         // Dispatched for async IO
+        ASYNC_ERROR,      // Async error from ASYNC_WAIT
         COMPLETING,       // Response is completable
         COMPLETED,        // Response is completed
         UPGRADED          // Request upgraded the connection
@@ -75,6 +76,7 @@ public class HttpChannelState
         DISPATCH,         // handle a normal request dispatch
         ASYNC_DISPATCH,   // handle an async request dispatch
         ERROR_DISPATCH,   // handle a normal error
+        ASYNC_ERROR,      // handle an async error
         WRITE_CALLBACK,   // handle an IO write callback
         READ_CALLBACK,    // handle an IO read callback
         COMPLETE,         // Complete the response
@@ -209,8 +211,6 @@ public class HttpChannelState
                     return Action.DISPATCH;
 
                 case COMPLETING:
-                    return Action.COMPLETE;
-
                 case COMPLETED:
                     return Action.TERMINATED;
 
@@ -254,6 +254,9 @@ public class HttpChannelState
                     }
 
                     return Action.WAIT;
+
+                case ASYNC_ERROR:
+                    return Action.ASYNC_ERROR;
 
                 case ASYNC_IO:
                 case ASYNC_WAIT:
@@ -315,6 +318,45 @@ public class HttpChannelState
     }
 
 
+    public void asyncError(Throwable failure)
+    {
+        AsyncContextEvent event = null;
+        try (Locker.Lock lock= _locker.lock())
+        {
+            switch (_state)
+            {
+                case IDLE:
+                case DISPATCHED:
+                case COMPLETING:
+                case COMPLETED:
+                case UPGRADED:
+                case ASYNC_IO:
+                case ASYNC_WOKEN:
+                case ASYNC_ERROR:
+                {
+                    break;
+                }
+                case ASYNC_WAIT:
+                {
+                    _event.addThrowable(failure);
+                    _state=State.ASYNC_ERROR;
+                    event=_event;
+                    break;
+                }
+                default:
+                {
+                    throw new IllegalStateException(getStatusStringLocked());
+                }
+            }
+        }
+
+        if (event != null)
+        {
+            cancelTimeout(event);
+            runInContext(event, _channel);
+        }
+    }
+
     /**
      * Signal that the HttpConnection has finished handling the request.
      * For blocking connectors,this call may block if the request has
@@ -325,7 +367,6 @@ public class HttpChannelState
     protected Action unhandle()
     {
         Action action;
-        AsyncContextEvent schedule_event=null;
         boolean read_interested=false;
 
         try(Locker.Lock lock= _locker.lock())
@@ -345,6 +386,7 @@ public class HttpChannelState
                     
                 case DISPATCHED:
                 case ASYNC_IO:
+                case ASYNC_ERROR:
                     break;
 
                 default:
@@ -381,10 +423,13 @@ public class HttpChannelState
                     }
                     else
                     {
-                        schedule_event=_event;
-                        read_interested=_asyncReadUnready;
                         _state=State.ASYNC_WAIT;
-                        action=Action.WAIT;
+                        action=Action.WAIT; 
+                        if (_asyncReadUnready)
+                            read_interested=true;
+                        Scheduler scheduler=_channel.getScheduler();
+                        if (scheduler!=null && _timeoutMs>0)
+                            _event.setTimeoutTask(scheduler.schedule(_event,_timeoutMs,TimeUnit.MILLISECONDS));
                     }
                     break;
 
@@ -420,10 +465,9 @@ public class HttpChannelState
             }
         }
 
-        if (schedule_event!=null)
-            scheduleTimeout(schedule_event);
         if (read_interested)
             _channel.asyncReadFillInterested();
+
         return action;
     }
 
@@ -498,7 +542,7 @@ public class HttpChannelState
 
         }
 
-        final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+        final AtomicReference<Throwable> error=new AtomicReference<>();
         if (listeners!=null)
         {
             Runnable task=new Runnable()
@@ -665,8 +709,6 @@ public class HttpChannelState
             // Set error on request.
             if(_event!=null)
             {
-                if (_event.getThrowable()!=null)
-                    throw new IllegalStateException("Error already set",_event.getThrowable());
                 _event.addThrowable(failure);
                 _event.getSuppliedRequest().setAttribute(ERROR_STATUS_CODE,code);
                 _event.getSuppliedRequest().setAttribute(ERROR_EXCEPTION,failure);
@@ -890,13 +932,6 @@ public class HttpChannelState
     protected void scheduleDispatch()
     {
         _channel.execute(_channel);
-    }
-
-    protected void scheduleTimeout(AsyncContextEvent event)
-    {
-        Scheduler scheduler = _channel.getScheduler();
-        if (scheduler!=null && _timeoutMs>0)
-            event.setTimeoutTask(scheduler.schedule(event,_timeoutMs,TimeUnit.MILLISECONDS));
     }
 
     protected void cancelTimeout()

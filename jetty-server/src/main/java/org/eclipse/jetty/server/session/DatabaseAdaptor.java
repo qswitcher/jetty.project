@@ -130,6 +130,9 @@ public class DatabaseAdaptor
      */
     public String convertIdentifier (String identifier)
     {
+        if (identifier == null)
+            return null;
+        
         if (_dbName == null)
             throw new IllegalStateException ("DbAdaptor missing metadata");
         
@@ -299,5 +302,14 @@ public class DatabaseAdaptor
         else
             return DriverManager.getConnection(_connectionUrl);
     }
-    
+
+
+    /** 
+     * @see java.lang.Object#toString()
+     */
+    @Override
+    public String toString()
+    {
+        return String.format("%s[jndi=%s,driver=%s]", super.toString(),_jndiName, _driverClassName);
+    } 
 }

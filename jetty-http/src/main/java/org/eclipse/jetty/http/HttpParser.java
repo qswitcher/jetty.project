@@ -28,6 +28,8 @@ import org.eclipse.jetty.http.HttpTokens.EndOfContent;
 import org.eclipse.jetty.util.ArrayTernaryTrie;
 import org.eclipse.jetty.util.ArrayTrie;
 import org.eclipse.jetty.util.BufferUtil;
+import org.eclipse.jetty.util.HostPort;
+import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.Trie;
 import org.eclipse.jetty.util.TypeUtil;
 import org.eclipse.jetty.util.Utf8StringBuilder;
@@ -601,7 +603,7 @@ public class HttpParser
                 if (_state==State.URI)
                 {
                     LOG.warn("URI is too large >"+_maxHeaderBytes);
-                    throw new BadMessageException(HttpStatus.REQUEST_URI_TOO_LONG_414);
+                    throw new BadMessageException(HttpStatus.URI_TOO_LONG_414);
                 }
                 else
                 {
@@ -609,7 +611,7 @@ public class HttpParser
                         LOG.warn("request is too large >"+_maxHeaderBytes);
                     else
                         LOG.warn("response is too large >"+_maxHeaderBytes);
-                    throw new BadMessageException(HttpStatus.REQUEST_ENTITY_TOO_LARGE_413);
+                    throw new BadMessageException(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431);
                 }
             }
 
@@ -907,7 +909,7 @@ public class HttpParser
 
                     case HOST:
                         _host=true;
-                        if (!(_field instanceof HostPortHttpField))
+                        if (!(_field instanceof HostPortHttpField) && _valueString!=null && !_valueString.isEmpty())
                         {
                             _field=new HostPortHttpField(_header,legacyString(_headerString,_header.asString()),_valueString);
                             add_to_connection_trie=_connectionFields!=null;
@@ -933,6 +935,7 @@ public class HttpParser
                         break;
 
                     default: break;
+
                 }
 
                 if (add_to_connection_trie && !_connectionFields.isFull() && _header!=null && _valueString!=null)
@@ -983,7 +986,7 @@ public class HttpParser
             if (_maxHeaderBytes>0 && ++_headerBytes>_maxHeaderBytes)
             {
                 LOG.warn("Header is too large >"+_maxHeaderBytes);
-                throw new BadMessageException(HttpStatus.REQUEST_ENTITY_TOO_LARGE_413);
+                throw new BadMessageException(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431);
             }
 
             switch (_state)

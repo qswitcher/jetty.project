@@ -58,14 +58,14 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
     @Rule
     public TestTracker tracker = new TestTracker();
     
-    protected static final int MAX_IDLE_TIME=500;
+    protected static final int MAX_IDLE_TIME=2000;
     private int sleepTime = MAX_IDLE_TIME + MAX_IDLE_TIME/5;
     private int minimumTestRuntime = MAX_IDLE_TIME-MAX_IDLE_TIME/5;
     private int maximumTestRuntime = MAX_IDLE_TIME*10;
 
     static
     {
-        System.setProperty("org.eclipse.jetty.io.nio.IDLE_TICK","100");
+        System.setProperty("org.eclipse.jetty.io.nio.IDLE_TICK","500");
     }
 
     @Before
@@ -73,7 +73,12 @@ public abstract class ConnectorTimeoutTest extends HttpServerTestFixture
     {
         super.before();
         if (_httpConfiguration!=null)
+        {
             _httpConfiguration.setBlockingTimeout(-1L);
+            _httpConfiguration.setMinRequestDataRate(-1);
+            _httpConfiguration.setIdleTimeout(-1);
+        }
+        
     }
 
     @Test(timeout=60000)

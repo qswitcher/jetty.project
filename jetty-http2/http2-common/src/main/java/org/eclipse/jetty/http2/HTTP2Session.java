@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.http2.api.Session;
@@ -75,6 +76,7 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
     private final AtomicInteger sendWindow = new AtomicInteger();
     private final AtomicInteger recvWindow = new AtomicInteger();
     private final AtomicReference<CloseState> closed = new AtomicReference<>(CloseState.NOT_CLOSED);
+    private final AtomicLong bytesWritten = new AtomicLong();
     private final Scheduler scheduler;
     private final EndPoint endPoint;
     private final Generator generator;
@@ -111,6 +113,32 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
     {
         addBean(flowControl);
         super.doStart();
+    }
+
+    @Override
+    protected void doStop() throws Exception
+    {
+        super.doStop();
+        close(ErrorCode.NO_ERROR.code, "stop", new Callback()
+        {
+            @Override
+            public void succeeded()
+            {
+                disconnect();
+            }
+
+            @Override
+            public void failed(Throwable x)
+            {
+                disconnect();
+            }
+
+            @Override
+            public InvocationType getInvocationType()
+            {
+                return InvocationType.NON_BLOCKING;
+            }
+        });
     }
 
     @ManagedAttribute(value = "The flow control strategy", readonly = true)
@@ -169,6 +197,12 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
     public Generator getGenerator()
     {
         return generator;
+    }
+
+    @Override
+    public long getBytesWritten()
+    {
+        return bytesWritten.get();
     }
 
     @Override
@@ -320,13 +354,15 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
                 }
                 case SettingsFrame.MAX_HEADER_LIST_SIZE:
                 {
-                    // TODO implement
-                    LOG.warn("NOT IMPLEMENTED max header list size to {}", value);
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("Update max header list size to {}", value);
+                    generator.setMaxHeaderListSize(value);
                     break;
                 }
                 default:
                 {
-                    LOG.debug("Unknown setting {}:{}", key, value);
+                    if (LOG.isDebugEnabled())
+                        LOG.debug("Unknown setting {}:{}", key, value);
                     break;
                 }
             }
@@ -335,7 +371,7 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
 
         if (reply)
         {
-            SettingsFrame replyFrame = new SettingsFrame(Collections.<Integer, Integer>emptyMap(), true);
+            SettingsFrame replyFrame = new SettingsFrame(Collections.emptyMap(), true);
             settings(replyFrame, Callback.NOOP);
         }
     }
@@ -391,20 +427,8 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
                     {
                         // We received a GO_AWAY, so try to write
                         // what's in the queue and then disconnect.
-                        control(null, new Callback()
-                        {
-                            @Override
-                            public void succeeded()
-                            {
-                                notifyClose(HTTP2Session.this, frame);
-                            }
-
-                            @Override
-                            public void failed(Throwable x)
-                            {
-                                notifyClose(HTTP2Session.this, frame);
-                            }
-                        }, new DisconnectFrame());
+                        notifyClose(this, frame);
+                        control(null, Callback.NOOP, new DisconnectFrame());
                         return;
                     }
                     break;
@@ -444,8 +468,8 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
     @Override
     public void onConnectionFailure(int error, String reason)
     {
-        close(error, reason, Callback.NOOP);
         notifyFailure(this, new IOException(String.format("%d/%s", error, reason)));
+        close(error, reason, Callback.NOOP);
     }
 
     @Override
@@ -656,7 +680,7 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
         while (true)
         {
             int localCount = localStreamCount.get();
-            int maxCount = maxLocalStreams;
+            int maxCount = getMaxLocalStreams();
             if (maxCount >= 0 && localCount >= maxCount)
             {
                 promise.failed(new IllegalStateException("Max local stream count " + maxCount + " exceeded"));
@@ -735,6 +759,8 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
                 localStreamCount.decrementAndGet();
             else
                 remoteStreamCount.decrementAndGet();
+
+            onStreamClosed(stream);
 
             flowControl.onStreamDestroyed(stream);
 
@@ -924,6 +950,14 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
         onConnectionFailure(ErrorCode.PROTOCOL_ERROR.code, "upgrade");
     }
 
+    protected void onStreamOpened(IStream stream)
+    {
+    }
+
+    protected void onStreamClosed(IStream stream)
+    {
+    }
+
     public void disconnect()
     {
         if (LOG.isDebugEnabled())
@@ -963,8 +997,8 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
 
     protected void abort(Throwable failure)
     {
-        terminate();
         notifyFailure(this, failure);
+        terminate();
     }
 
     public boolean isDisconnected()
@@ -1080,6 +1114,8 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
 
     private class ControlEntry extends HTTP2Flusher.Entry
     {
+        private int bytes;
+
         private ControlEntry(Frame frame, IStream stream, Callback callback)
         {
             super(frame, stream, callback);
@@ -1087,7 +1123,7 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
 
         protected boolean generate(ByteBufferPool.Lease lease)
         {
-            generator.control(lease, frame);
+            bytes = generator.control(lease, frame);
             if (LOG.isDebugEnabled())
                 LOG.debug("Generated {}", frame);
             prepare();
@@ -1129,10 +1165,12 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
         @Override
         public void succeeded()
         {
+            bytesWritten.addAndGet(bytes);
             switch (frame.getType())
             {
                 case HEADERS:
                 {
+                    onStreamOpened(stream);
                     HeadersFrame headersFrame = (HeadersFrame)frame;
                     if (stream.updateClose(headersFrame.isEndStream(), true))
                         removeStream(stream);
@@ -1182,8 +1220,9 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
 
     private class DataEntry extends HTTP2Flusher.Entry
     {
-        private int remaining;
-        private int generated;
+        private int bytes;
+        private int dataRemaining;
+        private int dataWritten;
 
         private DataEntry(DataFrame frame, IStream stream, Callback callback)
         {
@@ -1193,35 +1232,37 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
             // of data frames that cannot be completely written due to
             // the flow control window exhausting, since in that case
             // we would have to count the padding only once.
-            remaining = frame.remaining();
+            dataRemaining = frame.remaining();
         }
 
         @Override
         public int dataRemaining()
         {
-            return remaining;
+            return dataRemaining;
         }
 
         protected boolean generate(ByteBufferPool.Lease lease)
         {
-            int toWrite = dataRemaining();
+            int dataRemaining = dataRemaining();
 
             int sessionSendWindow = getSendWindow();
             int streamSendWindow = stream.updateSendWindow(0);
             int window = Math.min(streamSendWindow, sessionSendWindow);
-            if (window <= 0 && toWrite > 0)
+            if (window <= 0 && dataRemaining > 0)
                 return false;
 
-            int length = Math.min(toWrite, window);
+            int length = Math.min(dataRemaining, window);
 
-            int generated = generator.data(lease, (DataFrame)frame, length);
+            // Only one DATA frame is generated.
+            bytes = generator.data(lease, (DataFrame)frame, length);
+            int written = bytes - Frame.HEADER_LENGTH;
             if (LOG.isDebugEnabled())
-                LOG.debug("Generated {}, length/window/data={}/{}/{}", frame, generated, window, toWrite);
+                LOG.debug("Generated {}, length/window/data={}/{}/{}", frame, written, window, dataRemaining);
 
-            this.generated += generated;
-            this.remaining -= generated;
+            this.dataWritten = written;
+            this.dataRemaining -= written;
 
-            flowControl.onDataSending(stream, generated);
+            flowControl.onDataSending(stream, written);
 
             return true;
         }
@@ -1229,8 +1270,9 @@ public abstract class HTTP2Session extends ContainerLifeCycle implements ISessio
         @Override
         public void succeeded()
         {
-            flowControl.onDataSent(stream, generated);
-            generated = 0;
+            bytesWritten.addAndGet(bytes);
+            flowControl.onDataSent(stream, dataWritten);
+
             // Do we have more to send ?
             DataFrame dataFrame = (DataFrame)frame;
             if (dataRemaining() == 0)

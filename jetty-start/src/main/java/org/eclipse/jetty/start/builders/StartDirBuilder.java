@@ -46,11 +46,12 @@ public class StartDirBuilder implements BaseBuilder.Config
     {
         this.baseHome = baseBuilder.getBaseHome();
         this.startDir = baseHome.getBasePath("start.d");
-        FS.ensureDirectoryExists(startDir);
+        if (FS.ensureDirectoryExists(startDir))
+            StartLog.log("MKDIR",baseHome.toShortForm(startDir));
     }
 
     @Override
-    public boolean addModule(Module module) throws IOException
+    public String addModule(Module module) throws IOException
     {
         if (module.isDynamic())
         {
@@ -59,46 +60,20 @@ public class StartDirBuilder implements BaseBuilder.Config
                 // warn
                 StartLog.warn("%-15s not adding [ini-template] from dynamic module",module.getName());
             }
-            return false;
-        }
-
-        String mode = "";
-        if (module.isTransitive())
-        {
-            mode = "(transitively) ";
+            return null;
         }
 
         if (module.hasIniTemplate() || !module.isTransitive())
         {
             // Create start.d/{name}.ini
             Path ini = startDir.resolve(module.getName() + ".ini");
-            StartLog.info("%-15s initialised %sin %s",module.getName(),mode,baseHome.toShortForm(ini));
-
             try (BufferedWriter writer = Files.newBufferedWriter(ini,StandardCharsets.UTF_8,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING))
             {
-                writeModuleSection(writer,module);
+                module.writeIniSection(writer);
             }
-            return true;
+            return baseHome.toShortForm(ini);
         }
 
-        return false;
-    }
-
-    protected void writeModuleSection(BufferedWriter writer, Module module)
-    {
-        PrintWriter out = new PrintWriter(writer);
-
-        out.println("# --------------------------------------- ");
-        out.println("# Module: " + module.getName());
-        out.println("--module=" + module.getName());
-        out.println();
-
-        for (String line : module.getIniTemplate())
-        {
-            out.println(line);
-        }
-
-        out.println();
-        out.flush();
+        return null;
     }
 }

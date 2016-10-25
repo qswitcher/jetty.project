@@ -117,6 +117,9 @@ public class StringUtil
      */
     public static String asciiToLowerCase(String s)
     {
+        if (s == null)
+            return null;
+        
         char[] c = null;
         int i=s.length();
 
@@ -679,7 +682,6 @@ public class StringUtil
       
         return sidBytes;
     }
-    
 
     /**
      * Convert String to an integer. Parses up to the first non-numeric character. If no number is found an IllegalArgumentException is thrown

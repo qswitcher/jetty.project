@@ -3,6 +3,9 @@ Enables the DebugListener to generate additional
 logging regarding detailed request handling events.
 Renames threads to include request URI.
 
+[tags]
+debug
+
 [depend]
 deploy
 

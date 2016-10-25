@@ -19,10 +19,10 @@
 
 This example shows how to wrap one handler with another one that handles security.
 We have a simple Hello Handler that just return a greeting but add on the restriction that to get this greeting you must authenticate.
-Another thing to remember is that this example uses the ConstraintSecurityHandler which is what supports the security mappings inside of the servlet api, it could be easier to show just the SecurityHandler usage, but the constraint provides more configuration power.
-If you don't need that you can drop the Constraint bits and use just the SecurityHandler.
+Another thing to remember is that this example uses the `ConstraintSecurityHandler` which is what supports the security mappings inside of the servlet api, it could be easier to show just the `SecurityHandler` usage, but the constraint provides more configuration power.
+If you don't need that you can drop the Constraint bits and use just the `SecurityHandler`.
 
-[source,java]
+[source, java, subs="{sub-order}"]
 ----
 include::{SRCDIR}/examples/embedded/src/main/java/org/eclipse/jetty/embedded/SecuredHelloHandler.java[]
 
@@ -42,9 +42,9 @@ include::{SRCDIR}/examples/embedded/src/test/resources/realm.properties[]
 
 ===== Maven Coordinates
 
-To use this example in your project you will need the following maven dependencies declared.
+To use this example in your project you will need the following Maven dependencies declared.
 
-[source,xml]
+[source, xml, subs="{sub-order}"]
 ----
 
 <dependency>
