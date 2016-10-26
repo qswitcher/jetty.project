@@ -115,7 +115,7 @@ public class ALPNServerConnection extends NegotiatingServerConnection implements
         for (ListIterator<String> i = ordered.listIterator(); i.hasNext(); )
         {
             String p = i.next();
-            if (!protocols.contains(i))
+            if (!protocols.contains(p))
                 i.remove();
         }
 

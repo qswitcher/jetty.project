@@ -21,8 +21,10 @@ package org.eclipse.jetty.alpn.java.server;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import javax.net.ssl.SSLEngine;
@@ -41,7 +43,7 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
 {
     private static final Logger LOG = Log.getLogger(ClientHelloALPNProcessor.class);
 
-    private final List<CipherProtocolPair> pairs = new ArrayList<>();
+    private final Map<String,String> cipher2protocol = new HashMap<>();
     private String tlsProtocol;
     private List<String> ciphersOffered;
     private List<String> protocolsOffered;
@@ -95,12 +97,12 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
         {
             try
             {
-                String cipherSuite = iterator.next();
+                String cipher = iterator.next();
 
                 // We ask our ALPN provider what protocol they would select for the TLS protocol, cipher 
                 // and given list of offered protocols.  This is a call back to our connection factory,
                 // which probably will implements HTTP2 TLS requirements, but may be arbitrary logic in future.
-                String protocol = provider.select(new ALPNServerProvider.Info(tlsProtocol, cipherSuite, protocolsOffered));
+                String protocol = provider.select(new ALPNServerProvider.Info(tlsProtocol, cipher, protocolsOffered));
 
                 // If there is no acceptable protocol for the cipher
                 if (protocol == null)
@@ -111,7 +113,7 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
                 else
                 {
                     // We have an acceptable cipher protocol pair!
-                    pairs.add(new CipherProtocolPair(cipherSuite, protocol));
+                	cipher2protocol.put(cipher,protocol);
                 }
             }
             catch (Throwable x)
@@ -122,7 +124,7 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
         }
 
         // Do we have any acceptable cipher protocol pairs?
-        if (pairs.isEmpty())
+        if (cipher2protocol.isEmpty())
             throw new SSLHandshakeException("no_application_protocol");
 
         // Set the acceptable ciphers on the SslEngine
@@ -132,8 +134,8 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
         // Set the application protocol(s) on the SslEngine
         // Ideally we would like to tell it our cipherProtocol pairs, but API does not support that!
         // We must pick only one application protocol, even if that is not acceptable for all ciphers!
-        List<String> protocols = new ArrayList<>(pairs.stream().map(CipherProtocolPair::getProtocol).collect(Collectors.toSet()));
-//        provider.sort(protocols); // Broken
+        List<String> protocols = new ArrayList<>(cipher2protocol.values());
+        provider.sort(protocols);
         sslParameters.setApplicationProtocols(new String[]{protocols.get(0)});
 
         // Update the SslEngine with the parameters.
@@ -159,24 +161,18 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
             throw new SSLHandshakeException("no_tls_protocol");
 
         // What cipher was negotiated?  Check we have a cipher protocol pair for it 
-        String cipherSuite = session.getCipherSuite();
-        List<CipherProtocolPair> pairs = this.pairs.stream()
-                .filter(pair -> cipherSuite.equals(pair.getCipherSuite()))
-                .collect(Collectors.toList());
-        if (pairs.isEmpty())
-            throw new SSLHandshakeException("no_cipher_suite");
+        String cipher = session.getCipherSuite();
+        String protocol = cipher2protocol.get(cipher);
+        if (protocol==null)
+            throw new SSLHandshakeException("no_application_protocol_for_cipher");
 
-        // Is there an cipher protocol pair for the pre configured application protocol?
-        String protocol = sslParameters.getApplicationProtocols()[0];
-        if (pairs.stream().noneMatch(pair -> protocol.equals(pair.protocol)))
+        // Is the configured application protocol the same as negotiated?
+        if (!protocol.equals(sslParameters.getApplicationProtocols()[0]))
         {
             // This is a rare but possible case!
 
             // TODO we would like to do this
-            List<String> protocols = new ArrayList<>(pairs.stream().map(CipherProtocolPair::getProtocol).collect(Collectors.toSet()));
-            provider.sort(protocols);
-            String next = protocols.get(0);
-            sslParameters.setApplicationProtocols(new String[]{next});
+            sslParameters.setApplicationProtocols(new String[]{protocol});
             sslEngine.setSSLParameters(sslParameters);
 
             // TODO but it is ignored, so we have to do
@@ -189,27 +185,5 @@ public class ClientHelloALPNProcessor extends ClientHelloALPNParser implements C
 
         // Signal the application protocol choice
         provider.selected(protocol);
-    }
-
-    private static class CipherProtocolPair
-    {
-        private final String cipherSuite;
-        private final String protocol;
-
-        private CipherProtocolPair(String cipherSuite, String protocol)
-        {
-            this.cipherSuite = cipherSuite;
-            this.protocol = protocol;
-        }
-
-        public String getCipherSuite()
-        {
-            return cipherSuite;
-        }
-
-        public String getProtocol()
-        {
-            return protocol;
-        }
     }
 }
