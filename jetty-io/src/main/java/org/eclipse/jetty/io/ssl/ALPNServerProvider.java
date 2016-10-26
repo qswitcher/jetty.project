@@ -25,6 +25,8 @@ public interface ALPNServerProvider
     public String select(Info info);
 
     public void selected(String protocol);
+    
+    public void sort(List<String> protocols);
 
     public static class Info
     {

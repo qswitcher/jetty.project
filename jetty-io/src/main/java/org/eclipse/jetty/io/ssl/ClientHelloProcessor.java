@@ -25,21 +25,15 @@ import javax.net.ssl.SSLException;
 
 public interface ClientHelloProcessor
 {
-    public static final ClientHelloProcessor NOOP = new ClientHelloProcessor()
+    public static final ClientHelloProcessor NOOP = new ClientHelloProcessor(){};
+
+    public default boolean preProcess(ByteBuffer buffer, SSLEngine sslEngine) throws SSLException
+    { 
+        return true; 
+    }
+
+    public default void postProcess(SSLEngine sslEngine) throws SSLException
     {
-        @Override
-        public boolean preProcess(ByteBuffer buffer, SSLEngine sslEngine) throws SSLException
-        {
-            return true;
-        }
-
-        @Override
-        public void postProcess(SSLEngine sslEngine) throws SSLException
-        {
-        }
-    };
-
-    public boolean preProcess(ByteBuffer buffer, SSLEngine sslEngine) throws SSLException;
-
-    public void postProcess(SSLEngine sslEngine) throws SSLException;
+        
+    }
 }

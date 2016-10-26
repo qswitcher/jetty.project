@@ -18,8 +18,10 @@
 
 package org.eclipse.jetty.alpn.server;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.ListIterator;
 
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSession;
@@ -105,6 +107,22 @@ public class ALPNServerConnection extends NegotiatingServerConnection implements
         return negotiated;
     }
 
+
+    @Override
+    public void sort(List<String> protocols)
+    {
+    	List<String> ordered = new ArrayList<>(getProtocols());
+    	for (ListIterator<String> i=ordered.listIterator();i.hasNext();)
+    	{
+    		String p = i.next();
+    		if (!protocols.contains(i))
+    			i.remove();
+    	}
+    	
+    	protocols.clear();
+    	protocols.addAll(ordered);
+    }
+    
     @Override
     public void selected(String protocol)
     {
