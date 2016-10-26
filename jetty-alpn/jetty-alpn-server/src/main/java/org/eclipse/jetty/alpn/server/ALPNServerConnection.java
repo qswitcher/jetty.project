@@ -111,16 +111,16 @@ public class ALPNServerConnection extends NegotiatingServerConnection implements
     @Override
     public void sort(List<String> protocols)
     {
-    	List<String> ordered = new ArrayList<>(getProtocols());
-    	for (ListIterator<String> i=ordered.listIterator();i.hasNext();)
-    	{
-    		String p = i.next();
-    		if (!protocols.contains(i))
-    			i.remove();
-    	}
-    	
-    	protocols.clear();
-    	protocols.addAll(ordered);
+        List<String> ordered = new ArrayList<>(getProtocols());
+        for (ListIterator<String> i = ordered.listIterator(); i.hasNext(); )
+        {
+            String p = i.next();
+            if (!protocols.contains(i))
+                i.remove();
+        }
+
+        protocols.clear();
+        protocols.addAll(ordered);
     }
     
     @Override
