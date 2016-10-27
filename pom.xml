@@ -152,6 +152,8 @@
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>0.7.7.201606060606</version>
         <configuration>
+          <!-- No JDK 9 support yet -->
+          <skip>true</skip>
           <excludes>
             <!-- build tools -->
             <exclude>**/org/eclipse/jetty/ant/**</exclude>
